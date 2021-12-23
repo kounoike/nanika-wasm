@@ -309,22 +309,17 @@ int main(int argc, char *argv[]) {
     }
 
     // 0x00-0x35の範囲でループさせる
-    a31FBsum -= a31FBskip[a31DC[0]];
-
     // '*'にしない
-    do {
-      a31DC[0]++; // 1個目をインクリメント
-    } while (atoy[a31DC[0]] == '*');
-
     for (i = 0; i < atk_count; i++) {
+      a31FBsum -= a31FBskip[a31DC[i]];
+      do {
+        a31DC[i]++; // 1個目をインクリメント
+      } while (atoy[a31DC[0]] == '*');
       // 35を超えたら次の桁へ
       if (a31DC[i] > 0x35) {
         a31DC[i] = 0;
         a31FBsum += a31FBskip[a31DC[i]];
         a31FBsum -= a31FBskip[a31DC[i + 1]];
-        do {
-          a31DC[i + 1]++;
-        } while (atoy[a31DC[i + 1]] == '*');
       } else {
         a31FBsum += a31FBskip[a31DC[i]];
         break;
