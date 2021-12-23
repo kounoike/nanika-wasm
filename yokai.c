@@ -90,6 +90,15 @@ int main(int argc, char *argv[]) {
 
   // a31DCにターゲット桁数の数値を入れて回転させて、値が一致するまでアタック
 
+  // テストコード(あーすまん氏の$31FB合計値テーブル比較によるループスキップ)
+  // 文字全部のテーブル値を足した結果との差が1以下で無ければgoto
+  // LOOPさせて高速化
+  // 計算はdifferentialに行う
+  a31FBsum = 0;
+  for (i = 0; i < atk_count; i++) {
+    a31FBsum += a31FBskip[a31DC[i]];
+  }
+
   while (1) {
     int need_check = 1;
 
@@ -106,27 +115,28 @@ int main(int argc, char *argv[]) {
     stackApos = 0;
     C = 0;
 
-    // 試しにこのタイミングで配列を全走査して
-    // atoy[]に'*'を検出したら強制スキップさせて 高速化できないか実験
-    // 2桁目以降に出現した場合は上位インクリメントして下位をゼロクリア
-    for (i = 0; i < atk_count; i++) {
-      if (atoy[a31DC[i]] == '*') {
-        need_check = 0;
-        break;
-      }
-    }
-
-    // テストコード(あーすまん氏の$31FB合計値テーブル比較によるループスキップ)
-    // 文字全部のテーブル値を足した結果との差が1以下で無ければgoto
-    // LOOPさせて高速化
-    a31FBsum = 0;
-    for (i = 0; i < atk_count; i++) {
-      a31FBsum += a31FBskip[a31DC[i]];
-    }
-
+    // // 試しにこのタイミングで配列を全走査して
+    // // atoy[]に'*'を検出したら強制スキップさせて 高速化できないか実験
+    // // 2桁目以降に出現した場合は上位インクリメントして下位をゼロクリア
+    // for (i = 0; i < atk_count; i++) {
+    //   if (atoy[a31DC[i]] == '*') {
+    //     need_check = 0;
+    //     break;
+    //   }
+    // }
     if (atk31FB != a31FBsum && atk31FB != a31FBsum + 1) {
       need_check = 0;
     }
+
+    printf("Start: ");
+    for (i = 0; i < atk_count; i++) {
+      printf("%02X ", a31DC[i]);
+    }
+    printf("= ");
+    for (i = 0; i < atk_count; i++) {
+      printf("%c", atoy[a31DC[i]]);
+    }
+    printf(" : need_check:[%d] a31FBsum:[%d]\n", need_check, a31FBsum);
 
     if (need_check) {
       // 以下メインルーチン
@@ -299,13 +309,25 @@ int main(int argc, char *argv[]) {
     }
 
     // 0x00-0x35の範囲でループさせる
-    a31DC[0]++; // 1個目をインクリメント
+    a31FBsum -= a31FBskip[a31DC[0]];
+
+    // '*'にしない
+    do {
+      a31DC[0]++; // 1個目をインクリメント
+    } while (atoy[a31DC[0]] == '*');
 
     for (i = 0; i < atk_count; i++) {
       // 35を超えたら次の桁へ
       if (a31DC[i] > 0x35) {
         a31DC[i] = 0;
-        a31DC[i + 1]++;
+        a31FBsum += a31FBskip[a31DC[i]];
+        a31FBsum -= a31FBskip[a31DC[i + 1]];
+        do {
+          a31DC[i + 1]++;
+        } while (atoy[a31DC[i + 1]] == '*');
+      } else {
+        a31FBsum += a31FBskip[a31DC[i]];
+        break;
       }
       // 最終桁が36になった瞬間に脱出
       if (a31DC[atk_count - 1] == 0x36) {
@@ -314,17 +336,18 @@ int main(int argc, char *argv[]) {
       }
     }
 
-    // ESCキー判定。65535回に1度しかチェックしない
-    if (a31DC[0] == 0 && a31DC[1] == 0 && a31DC[2] == 0 && a31DC[3] == 0 &&
-        a31DC[4] == 0) {
-      printf("continue command : yokai03.exe %s %s %s %s %s %s %s %s ", argv[1],
-             argv[2], argv[3], argv[4], argv[5], argv[6], argv[7], argv[8]);
-      for (i = 0; i < atk_count; i++) {
-        printf("%02X ", a31DC[i]);
-      }
-      printf("\n");
-      return 0;
-    }
+    // // ESCキー判定。65535回に1度しかチェックしない
+    // if (a31DC[0] == 0 && a31DC[1] == 0 && a31DC[2] == 0 && a31DC[3] == 0 &&
+    //     a31DC[4] == 0 && a31DC[5] == 0) {
+    //   printf("continue command : yokai03.exe %s %s %s %s %s %s %s %s ",
+    //   argv[1],
+    //          argv[2], argv[3], argv[4], argv[5], argv[6], argv[7], argv[8]);
+    //   for (i = 0; i < atk_count; i++) {
+    //     printf("%02X ", a31DC[i]);
+    //   }
+    //   printf("\n");
+    //   return 0;
+    // }
   }
 
   return 0;
