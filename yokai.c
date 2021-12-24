@@ -19,6 +19,8 @@ static int a31FBskip[] = {0, 1, 1, 2, 1, 2, 0, 0, 1, 2, 2, 3, 2, 3, 0, 0, 1, 2,
                           2, 3, 2, 3, 0, 0, 2, 3, 3, 4, 3, 4, 0, 0, 1, 2, 2, 3,
                           2, 3, 0, 0, 2, 3, 3, 4, 3, 4, 0, 0, 2, 3, 3, 4, 3, 4};
 
+#define A31FBDIFF 2
+
 // メイン
 int main(int argc, char *argv[]) {
 
@@ -38,6 +40,7 @@ int main(int argc, char *argv[]) {
   int a31F4 = 0, a31F5 = 0, a31F7 = 0, a31F8 = 0, a31F9 = 0, a31FA = 0,
       a31FB = 0;
   int a31FBsum = 0;
+  char a31F9tmp = 0;
   int ror = 0;
   int continue_count = 0;
 
@@ -86,6 +89,8 @@ int main(int argc, char *argv[]) {
       printf("%02X ", a31DC[i]);
     }
     printf("\n");
+  } else {
+    printf("最初から回します\n");
   }
 
   // a31DCにターゲット桁数の数値を入れて回転させて、値が一致するまでアタック
@@ -97,6 +102,11 @@ int main(int argc, char *argv[]) {
   a31FBsum = 0;
   for (i = 0; i < atk_count; i++) {
     a31FBsum += a31FBskip[a31DC[i]];
+  }
+
+  a31F9tmp = 0;
+  for (i = 0; i < atk_count; i++) {
+    a31F9tmp ^= a31DC[i];
   }
 
   int cnt = 0;
@@ -127,13 +137,14 @@ int main(int argc, char *argv[]) {
     //     break;
     //   }
     // }
-    if (atk31FB != a31FBsum && atk31FB != a31FBsum + 1) {
+    if (a31FBsum > atk31FB || a31FBsum + A31FBDIFF < atk31FB ||
+        a31F9tmp != atk31F9) {
       need_check = 0;
     }
 
-    if (cnt % 1000000 == 0) {
+    if (cnt % 10000000 == 0) {
 
-      printf("Start: ");
+      printf("Current: ");
       for (i = 0; i < atk_count; i++) {
         printf("%02X ", a31DC[i]);
       }
@@ -141,7 +152,8 @@ int main(int argc, char *argv[]) {
       for (i = 0; i < atk_count; i++) {
         printf("%c", atoy[a31DC[i]]);
       }
-      printf(" : need_check:[%d] a31FBsum:[%d]\n", need_check, a31FBsum);
+      printf(" : need_check:[%d] a31FBsum:[%02X] a31F9tmp:[%02X]\n", need_check,
+             a31FBsum, a31F9tmp);
     }
 
     if (need_check) {
@@ -156,142 +168,146 @@ int main(int argc, char *argv[]) {
       // }
       // printf("\n");
 
-    D86B:
-      A = a31DC[X];
+      a31FB = a31FBsum;
+      a31F9 = a31F9tmp;
 
-      // D8BD:
-      stackA[stackApos++] = A;
-      Y = 8;
-    D8C0:
-      A = A << 1;
+      for (X = 0; X < atk_count; X++) {
+        A = a31DC[X];
 
-      if (A > 0xFF) {
-        C = 1;
-        A = A & 0xFF;
-      } else {
-        C = 0;
+        // D8BD:
+        stackA[stackApos++] = A;
+        for (Y = 0; Y < 8; Y++) {
+          A = A << 1;
+
+          if (A > 0xFF) {
+            C = 1;
+            A = A & 0xFF;
+          } else {
+            C = 0;
+          }
+          stackA[stackApos++] = A;
+          // 31F4と31F5を右1ビットローテート
+          ror = a31F4 & 0x01;
+          a31F4 = a31F4 >> 1;
+          a31F4 = a31F4 | (C << 7); // C0000000
+          C = ror;
+
+          ror = a31F5 & 0x01;
+          a31F5 = a31F5 >> 1;
+          a31F5 = a31F5 | (C << 7); // C0000000
+          C = ror;
+
+          // printf("ror %02X %02X\n",a31F4,a31F5);
+
+          A = 0;
+          A = 0xFF + C;
+          if (A > 0xFF) {
+            A = 0;
+            C = 1;
+          } else
+            C = 0;
+          A = A ^ 0xFF;
+          stackA[stackApos++] = A;
+          A = A & 0x84;
+          A = A ^ a31F4;
+          a31F4 = A;
+          A = stackA[--stackApos];
+          A = A & 0x08;
+          A = A ^ a31F5;
+          a31F5 = A;
+          A = stackA[--stackApos];
+        }
+        A = stackA[--stackApos]; // ここまでで31F4と31F5算出完了
+
+        // D8A4: // 31F7と31F8を生成(Complete)
+        stackA[stackApos++] = A;
+        stackA[stackApos++] = A;
+        A = a31F4;
+        if (A >= 0xE5) {
+          C = 1;
+        } else
+          C = 0; // C5の値でキャリーを生成
+        A = stackA[--stackApos];
+        A = A + a31F7 + C;
+        if (A > 0xFF) { // ADCのキャリー処理
+          A = A & 0xFF;
+          C = 1;
+        } else
+          C = 0;
+        a31F7 = A;
+        A = a31F8;
+        A = A + a31F5 + C;
+        if (A > 0xFF) { // ADCのキャリー処理
+          A = A & 0xFF;
+          C = 1;
+        } else
+          C = 0;
+        a31F8 = A;
+        A = stackA[--stackApos];
+
+        // 31F9生成をスキップ、計算済みの値を使う(kounoike)
+        // // D89B: // 31F9を生成(Complete)
+        // stackA[stackApos++] = A;
+        // A = A ^ a31F9;
+        // a31F9 = A;
+        // A = stackA[--stackApos];
+
+        // D88F: // 31FAを生成
+        stackA[stackApos++] = A;
+        // 31FAをローテート
+        ror = a31FA & 0x01;
+        a31FA = a31FA >> 1;
+        a31FA = a31FA | (C << 7); // $31F8のCがここで入る
+        C = ror;
+        A = A + a31FA + C;
+        if (A > 0xFF) { // ADCのキャリー処理
+          A = A & 0xFF;
+          C = 1;
+        } else
+          C = 0;
+        a31FA = A;
+
+        A = stackA[--stackApos];
+
+        // 31FB生成をスキップ、計算済みの値にキャリー値のみ加算(kounoike)
+        a31FB += C;
+
+        //   // D87F:
+        //   stackA[stackApos++] = A;
+        // D880: // 31FBを生成
+        //   // Aを左ローテート
+        //   A = A << 1;
+        //   if (A > 0xFF) { // ADCのキャリー処理
+        //     A = A & 0xFF;
+        //     C = 1;
+        //   } // ここにelseが入っていないのはバグ？(kounoike)
+        //   if (A == 0)
+        //     Z = 1;
+        //   else
+        //     Z = 0; // 演算結果がゼロの時Z=1;
+
+        //   stackA[stackApos++] = A; // スタックに値を保存
+        //   A = a31FB;
+        //   A = A + C;
+        //   if (A > 0xFF) { // ADCのキャリー処理
+        //     A = A & 0xFF;
+        //     C = 1;
+        //   } else
+        //     C = 0;
+        //   a31FB = A;
+
+        //   A = stackA[--stackApos];
+        // if (!Z)
+        //   goto D880; // ローテ終わるまでループ
+        // printf("a31FB=%x ",a31FB);
+
+        // A = stackA[--stackApos];
       }
-      stackA[stackApos++] = A;
-      // 31F4と31F5を右1ビットローテート
-      ror = a31F4 & 0x01;
-      a31F4 = a31F4 >> 1;
-      a31F4 = a31F4 | (C << 7); // C0000000
-      C = ror;
 
-      ror = a31F5 & 0x01;
-      a31F5 = a31F5 >> 1;
-      a31F5 = a31F5 | (C << 7); // C0000000
-      C = ror;
-
-      // printf("ror %02X %02X\n",a31F4,a31F5);
-
-      A = 0;
-      A = 0xFF + C;
-      if (A > 0xFF) {
-        A = 0;
-        C = 1;
-      } else
-        C = 0;
-      A = A ^ 0xFF;
-      stackA[stackApos++] = A;
-      A = A & 0x84;
-      A = A ^ a31F4;
-      a31F4 = A;
-      A = stackA[--stackApos];
-      A = A & 0x08;
-      A = A ^ a31F5;
-      a31F5 = A;
-      A = stackA[--stackApos];
-      Y--;
-      if (Y > 0)
-        goto D8C0;
-      A = stackA[--stackApos]; // ここまでで31F4と31F5算出完了
-
-      // D8A4: // 31F7と31F8を生成(Complete)
-      stackA[stackApos++] = A;
-      stackA[stackApos++] = A;
-      A = a31F4;
-      if (A >= 0xE5) {
-        C = 1;
-      } else
-        C = 0; // C5の値でキャリーを生成
-      A = stackA[--stackApos];
-      A = A + a31F7 + C;
-      if (A > 0xFF) { // ADCのキャリー処理
-        A = A & 0xFF;
-        C = 1;
-      } else
-        C = 0;
-      a31F7 = A;
-      A = a31F8;
-      A = A + a31F5 + C;
-      if (A > 0xFF) { // ADCのキャリー処理
-        A = A & 0xFF;
-        C = 1;
-      } else
-        C = 0;
-      a31F8 = A;
-      A = stackA[--stackApos];
-
-      // D89B: // 31F9を生成(Complete)
-      stackA[stackApos++] = A;
-      A = A ^ a31F9;
-      a31F9 = A;
-      A = stackA[--stackApos];
-
-      // D88F: // 31FAを生成
-      stackA[stackApos++] = A;
-      // 31FAをローテート
-      ror = a31FA & 0x01;
-      a31FA = a31FA >> 1;
-      a31FA = a31FA | (C << 7); // $31F8のCがここで入る
-      C = ror;
-      A = A + a31FA + C;
-      if (A > 0xFF) { // ADCのキャリー処理
-        A = A & 0xFF;
-        C = 1;
-      } else
-        C = 0;
-      a31FA = A;
-
-      A = stackA[--stackApos];
-
-      // D87F:
-      stackA[stackApos++] = A;
-    D880: // 31FBを生成
-      // Aを左ローテート
-      A = A << 1;
-      if (A > 0xFF) { // ADCのキャリー処理
-        A = A & 0xFF;
-        C = 1;
+      if (a31F9tmp != a31F9) {
+        printf("a31F9 not match! a31F9:[%02X] a31F9tmp:[%02X]\n", a31F9,
+               a31F9tmp);
       }
-      if (A == 0)
-        Z = 1;
-      else
-        Z = 0; // 演算結果がゼロの時Z=1;
-
-      stackA[stackApos++] = A; // スタックに値を保存
-      A = a31FB;
-      A = A + C;
-      if (A > 0xFF) { // ADCのキャリー処理
-        A = A & 0xFF;
-        C = 1;
-      } else
-        C = 0;
-      a31FB = A;
-
-      A = stackA[--stackApos];
-      if (!Z)
-        goto D880; // ローテ終わるまでループ
-      // printf("a31FB=%x ",a31FB);
-
-      A = stackA[--stackApos];
-
-      // 文字数分だけ演算をカウント
-      X++;
-
-      if (a31F6 != X)
-        goto D86B;
 
       // 検算終了後にチェック
       if (a31F4 == atk31F4 && a31F5 == atk31F5) {
@@ -315,60 +331,91 @@ int main(int argc, char *argv[]) {
       }
     }
 
-    // a31FBsumが足りないときは大きく動かす
-    int loop_start = 0;
-    if (a31FBsum < atk31FB) {
-      int partial_sum = a31FBsum;
-      for (i = 0; i < atk_count; i++) {
-        partial_sum += 4 - a31FBskip[a31DC[i]];
-        if (partial_sum >= atk31FB) {
-          loop_start = i;
-          break;
+    do {
+      // a31FBsumが足りないときは大きく動かす
+      int loop_start = 0;
+      if (a31FBsum + A31FBDIFF < atk31FB) {
+        int partial_sum = a31FBsum;
+        for (i = 0; i < atk_count; i++) {
+          partial_sum += 4 - a31FBskip[a31DC[i]];
+          if (partial_sum >= atk31FB) {
+            loop_start = i;
+            break;
+          }
         }
       }
-    }
 
-    // 大きすぎるときも大きく動かす
-    if (a31FBsum > atk31FB + 1) {
-      int partial_sum = a31FBsum;
-      for (i = 0; i < atk_count; i++) {
-        partial_sum -= a31FBskip[a31DC[i]];
-        if (partial_sum - a31FBskip[a31DC[i]] <= atk31FB + 1) {
-          loop_start = i;
-          break;
+      // 大きすぎるときも大きく動かす
+      if (a31FBsum > atk31FB) {
+        int partial_sum = a31FBsum;
+        for (i = 0; i < atk_count; i++) {
+          partial_sum -= a31FBskip[a31DC[i]];
+          if (partial_sum - a31FBskip[a31DC[i]] <= atk31FB + 1) {
+            loop_start = i;
+            break;
+          }
         }
       }
-    }
-    // printf("loop_start: [%d]\n", loop_start);
+      // printf("loop_start: [%d]\n", loop_start);
 
-    // 0x00-0x35の範囲でループさせる
-    // '*'にしない
-    for (i = loop_start; i < atk_count; i++) {
-      a31FBsum -= a31FBskip[a31DC[i]];
-      do {
-        a31DC[i]++;
-      } while (atoy[a31DC[i]] == '*');
-      // 35を超えたら次の桁へ
-      if (a31DC[i] > 0x35) {
-        a31DC[i] = 0;
-        a31FBsum += a31FBskip[a31DC[i]];
-      } else {
-        a31FBsum += a31FBskip[a31DC[i]];
-        break;
+      // 0x00-0x35の範囲でループさせる
+      // '*'にしない
+      for (i = 0; i < loop_start; i++) {
+        a31FBsum -= a31FBskip[a31DC[i]];
+        a31F9tmp ^= a31DC[i];
+        a31DC[i] = 0x00;
       }
-      // 最終桁が36になった瞬間に脱出
-      if (a31DC[atk_count - 1] == 0x36) {
-        printf("End.\n");
-        return 0;
+      for (i = loop_start; i < atk_count; i++) {
+        if (i == 0) {
+          // 最初の文字を変えるとき
+          // 31F9が一致していない→一致する値（0x35を超えてたら後ろで次の桁へ回す処理が働く）
+          // 31F9が一致している　→0x36を入れる（0x35を超えてたら後ろで次の桁へ回す処理が働く）
+          if (a31F9tmp != atk31F9) {
+            a31FBsum -= a31FBskip[a31DC[i]];
+            a31F9tmp ^= a31DC[i];
+            a31DC[i] = a31F9tmp ^ atk31F9;
+          } else {
+            a31FBsum -= a31FBskip[a31DC[i]];
+            a31F9tmp ^= a31DC[i];
+            a31DC[i] = 0x36;
+          }
+        } else {
+          // 他の桁は1つずつ進める
+          a31FBsum -= a31FBskip[a31DC[i]];
+          a31F9tmp ^= a31DC[i];
+          do {
+            a31DC[i]++;
+          } while (atoy[a31DC[i]] == '*');
+        }
+        // 0x35を超えたら次の桁へ
+        if (a31DC[i] > 0x35) {
+          a31DC[i] = 0;
+          a31FBsum += a31FBskip[a31DC[i]];
+          a31F9tmp ^= a31DC[i];
+        } else {
+          a31FBsum += a31FBskip[a31DC[i]];
+          a31F9tmp ^= a31DC[i];
+          break;
+        }
+        // 最終桁が0x36になった瞬間に脱出
+        if (a31DC[atk_count - 1] > 0x35) {
+          printf("End.\n");
+          return 0;
+        }
+        if (i == 9) {
+          printf("i==9;End.\n");
+          return 0;
+        }
       }
-    }
+    } while (a31FBsum + A31FBDIFF < atk31FB || a31FBsum > atk31FB);
 
     // // ESCキー判定。65535回に1度しかチェックしない
     // if (a31DC[0] == 0 && a31DC[1] == 0 && a31DC[2] == 0 && a31DC[3] == 0 &&
     //     a31DC[4] == 0 && a31DC[5] == 0) {
     //   printf("continue command : yokai03.exe %s %s %s %s %s %s %s %s ",
     //   argv[1],
-    //          argv[2], argv[3], argv[4], argv[5], argv[6], argv[7], argv[8]);
+    //          argv[2], argv[3], argv[4], argv[5], argv[6], argv[7],
+    //          argv[8]);
     //   for (i = 0; i < atk_count; i++) {
     //     printf("%02X ", a31DC[i]);
     //   }
