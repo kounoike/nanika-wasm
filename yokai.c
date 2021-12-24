@@ -99,8 +99,11 @@ int main(int argc, char *argv[]) {
     a31FBsum += a31FBskip[a31DC[i]];
   }
 
+  int cnt = 0;
+
   while (1) {
     int need_check = 1;
+    cnt++;
 
     // スタート
     X = 0;
@@ -128,19 +131,9 @@ int main(int argc, char *argv[]) {
       need_check = 0;
     }
 
-    printf("Start: ");
-    for (i = 0; i < atk_count; i++) {
-      printf("%02X ", a31DC[i]);
-    }
-    printf("= ");
-    for (i = 0; i < atk_count; i++) {
-      printf("%c", atoy[a31DC[i]]);
-    }
-    printf(" : need_check:[%d] a31FBsum:[%d]\n", need_check, a31FBsum);
+    if (cnt % 1000000 == 0) {
 
-    if (need_check) {
-      // 以下メインルーチン
-      printf("Skip logic passed: ");
+      printf("Start: ");
       for (i = 0; i < atk_count; i++) {
         printf("%02X ", a31DC[i]);
       }
@@ -148,7 +141,20 @@ int main(int argc, char *argv[]) {
       for (i = 0; i < atk_count; i++) {
         printf("%c", atoy[a31DC[i]]);
       }
-      printf("\n");
+      printf(" : need_check:[%d] a31FBsum:[%d]\n", need_check, a31FBsum);
+    }
+
+    if (need_check) {
+      // 以下メインルーチン
+      // printf("Skip logic passed: ");
+      // for (i = 0; i < atk_count; i++) {
+      //   printf("%02X ", a31DC[i]);
+      // }
+      // printf("= ");
+      // for (i = 0; i < atk_count; i++) {
+      //   printf("%c", atoy[a31DC[i]]);
+      // }
+      // printf("\n");
 
     D86B:
       A = a31DC[X];
@@ -304,22 +310,48 @@ int main(int argc, char *argv[]) {
             printf("%c", atoy[a31DC[i]]);
           }
           printf("\n");
+          return 0;
         }
       }
     }
 
+    // a31FBsumが足りないときは大きく動かす
+    int loop_start = 0;
+    if (a31FBsum < atk31FB) {
+      int partial_sum = a31FBsum;
+      for (i = 0; i < atk_count; i++) {
+        partial_sum += 4 - a31FBskip[a31DC[i]];
+        if (partial_sum >= atk31FB) {
+          loop_start = i;
+          break;
+        }
+      }
+    }
+
+    // 大きすぎるときも大きく動かす
+    if (a31FBsum > atk31FB + 1) {
+      int partial_sum = a31FBsum;
+      for (i = 0; i < atk_count; i++) {
+        partial_sum -= a31FBskip[a31DC[i]];
+        if (partial_sum - a31FBskip[a31DC[i]] <= atk31FB + 1) {
+          loop_start = i;
+          break;
+        }
+      }
+    }
+    // printf("loop_start: [%d]\n", loop_start);
+
     // 0x00-0x35の範囲でループさせる
     // '*'にしない
-    for (i = 0; i < atk_count; i++) {
+    for (i = loop_start; i < atk_count; i++) {
       a31FBsum -= a31FBskip[a31DC[i]];
       do {
-        a31DC[i]++; // 1個目をインクリメント
-      } while (atoy[a31DC[0]] == '*');
+        a31DC[i]++;
+      } while (atoy[a31DC[i]] == '*');
       // 35を超えたら次の桁へ
       if (a31DC[i] > 0x35) {
         a31DC[i] = 0;
         a31FBsum += a31FBskip[a31DC[i]];
-        a31FBsum -= a31FBskip[a31DC[i + 1]];
       } else {
         a31FBsum += a31FBskip[a31DC[i]];
         break;
