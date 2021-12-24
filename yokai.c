@@ -8,16 +8,74 @@
 #include <time.h>
 
 // 文字コード変換テーブル
-static char atoy[] = {'A', 'H', 'O', 'V', '1', '6', '*', '*', 'B', 'I', 'P',
-                      'W', '2', '7', '*', '*', 'C', 'J', 'Q', 'X', '3', '8',
-                      '*', '*', 'D', 'K', 'R', 'Y', '4', '9', '*', '*', 'E',
-                      'L', 'S', 'Z', '5', '0', '*', '*', 'F', 'M', 'T', '-',
-                      'n', '!', '*', '*', 'G', 'N', 'U', '.', 'm', 'c'};
+static unsigned char atoy[] = {
+    'A', 'H', 'O', 'V', '1', '6', '*', '*', 'B', 'I', 'P', 'W', '2', '7',
+    '*', '*', 'C', 'J', 'Q', 'X', '3', '8', '*', '*', 'D', 'K', 'R', 'Y',
+    '4', '9', '*', '*', 'E', 'L', 'S', 'Z', '5', '0', '*', '*', 'F', 'M',
+    'T', '-', 'n', '!', '*', '*', 'G', 'N', 'U', '.', 'm', 'c'};
 
 // $31FB高速スキップテーブル
 static int a31FBskip[] = {0, 1, 1, 2, 1, 2, 0, 0, 1, 2, 2, 3, 2, 3, 0, 0, 1, 2,
                           2, 3, 2, 3, 0, 0, 2, 3, 3, 4, 3, 4, 0, 0, 1, 2, 2, 3,
                           2, 3, 0, 0, 2, 3, 3, 4, 3, 4, 0, 0, 2, 3, 3, 4, 3, 4};
+
+// 次の妥当文字
+static unsigned char next_char[] = {
+    /* A->H */ 0x01,
+    /* H->O */ 0x02,
+    /* O->V */ 0x03,
+    /* V->1 */ 0x04,
+    /* 1->6 */ 0x05,
+    /* 6->B */ 0x08,
+    /* *->* */ 0xff,
+    /* *->* */ 0xff,
+    /* B->I */ 0x09,
+    /* I->P */ 0x0A,
+    /* P->W */ 0x0B,
+    /* W->2 */ 0x0C,
+    /* 2->7 */ 0x0D,
+    /* 7->C */ 0x10,
+    /* *->* */ 0xff,
+    /* *->* */ 0xff,
+    /* C->J */ 0x11,
+    /* J->Q */ 0x12,
+    /* Q->X */ 0x13,
+    /* X->3 */ 0x14,
+    /* 3->8 */ 0x15,
+    /* 8->D */ 0x18,
+    /* *->* */ 0xff,
+    /* *->* */ 0xff,
+    /* D->K */ 0x19,
+    /* K->R */ 0x1a,
+    /* R->Y */ 0x1b,
+    /* Y->4 */ 0x1c,
+    /* 4->9 */ 0x1d,
+    /* 9->E */ 0x20,
+    /* *->* */ 0xff,
+    /* *->* */ 0xff,
+    /* E->L */ 0x21,
+    /* L->S */ 0x22,
+    /* S->Z */ 0x23,
+    /* Z->5 */ 0x24,
+    /* 5->0 */ 0x25,
+    /* 0->F */ 0x28,
+    /* *->* */ 0xff,
+    /* *->* */ 0xff,
+    /* F->M */ 0x29,
+    /* M->T */ 0x2a,
+    /* T->- */ 0x2b,
+    /* -->n */ 0x2c,
+    /* n->! */ 0x2d,
+    /* !->G */ 0x30,
+    /* *->* */ 0xff,
+    /* *->* */ 0xff,
+    /* G->N */ 0x31,
+    /* N->U */ 0x32,
+    /* U->. */ 0x33,
+    /* .->m */ 0x34,
+    /* m->c */ 0x35,
+    /* c->Next */ 0x36,
+};
 
 #define A31FBDIFF 2
 
@@ -25,8 +83,8 @@ static int a31FBskip[] = {0, 1, 1, 2, 1, 2, 0, 0, 1, 2, 2, 3, 2, 3, 0, 0, 1, 2,
 int main(int argc, char *argv[]) {
 
   printf("yokai-test03 brute force atk\n");
-  char a31DC[256];
-  char temp = 0;
+  unsigned char a31DC[256];
+  unsigned char temp = 0;
   int i = 0, j = 0;
   int stackApos = 0, stackXpos = 0, stackYpos = 0;
   static int stackA[256];
@@ -40,7 +98,7 @@ int main(int argc, char *argv[]) {
   int a31F4 = 0, a31F5 = 0, a31F7 = 0, a31F8 = 0, a31F9 = 0, a31FA = 0,
       a31FB = 0;
   int a31FBsum = 0;
-  char a31F9tmp = 0;
+  unsigned char a31F9tmp = 0;
   int ror = 0;
   int continue_count = 0;
 
@@ -98,7 +156,7 @@ int main(int argc, char *argv[]) {
   // テストコード(あーすまん氏の$31FB合計値テーブル比較によるループスキップ)
   // 文字全部のテーブル値を足した結果との差が1以下で無ければgoto
   // LOOPさせて高速化
-  // 計算はdifferentialに行う
+  // a31FB, a31F9の計算はdifferentialに行う
   a31FBsum = 0;
   for (i = 0; i < atk_count; i++) {
     a31FBsum += a31FBskip[a31DC[i]];
@@ -304,10 +362,11 @@ int main(int argc, char *argv[]) {
         // A = stackA[--stackApos];
       }
 
-      if (a31F9tmp != a31F9) {
-        printf("a31F9 not match! a31F9:[%02X] a31F9tmp:[%02X]\n", a31F9,
-               a31F9tmp);
-      }
+      // tmpを代入するようになったのでチェックプリント外す
+      // if (a31F9tmp != a31F9) {
+      //   printf("a31F9 not match! a31F9:[%02X] a31F9tmp:[%02X]\n", a31F9,
+      //          a31F9tmp);
+      // }
 
       // 検算終了後にチェック
       if (a31F4 == atk31F4 && a31F5 == atk31F5) {
@@ -359,7 +418,6 @@ int main(int argc, char *argv[]) {
       // printf("loop_start: [%d]\n", loop_start);
 
       // 0x00-0x35の範囲でループさせる
-      // '*'にしない
       for (i = 0; i < loop_start; i++) {
         a31FBsum -= a31FBskip[a31DC[i]];
         a31F9tmp ^= a31DC[i];
@@ -369,7 +427,7 @@ int main(int argc, char *argv[]) {
         if (i == 0) {
           // 最初の文字を変えるとき
           // 31F9が一致していない→一致する値（0x35を超えてたら後ろで次の桁へ回す処理が働く）
-          // 31F9が一致している　→0x36を入れる（0x35を超えてたら後ろで次の桁へ回す処理が働く）
+          // 31F9が一致している　→0x36を入れる（0x35を超えているので後ろで次の桁へ回す処理が働く）
           if (a31F9tmp != atk31F9) {
             a31FBsum -= a31FBskip[a31DC[i]];
             a31F9tmp ^= a31DC[i];
@@ -383,9 +441,11 @@ int main(int argc, char *argv[]) {
           // 他の桁は1つずつ進める
           a31FBsum -= a31FBskip[a31DC[i]];
           a31F9tmp ^= a31DC[i];
-          do {
-            a31DC[i]++;
-          } while (atoy[a31DC[i]] == '*');
+          // '*'にしない
+          // do {
+          //   a31DC[i]++;
+          // } while (atoy[a31DC[i]] == '*');
+          a31DC[i] = next_char[a31DC[i]];
         }
         // 0x35を超えたら次の桁へ
         if (a31DC[i] > 0x35) {
@@ -407,7 +467,8 @@ int main(int argc, char *argv[]) {
           return 0;
         }
       }
-    } while (a31FBsum + A31FBDIFF < atk31FB || a31FBsum > atk31FB);
+    } while (a31FBsum + A31FBDIFF < atk31FB || a31FBsum > atk31FB ||
+             a31F9tmp != atk31F9);
 
     // // ESCキー判定。65535回に1度しかチェックしない
     // if (a31DC[0] == 0 && a31DC[1] == 0 && a31DC[2] == 0 && a31DC[3] == 0 &&
