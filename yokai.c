@@ -84,10 +84,10 @@ int main(int argc, char *argv[]) {
 
   printf("yokai-test03 brute force atk\n");
   unsigned char a31DC[256];
-  unsigned char temp = 0;
+  unsigned char temp = 0, temp2 = 0;
   int i = 0, j = 0;
-  int stackApos = 0, stackXpos = 0, stackYpos = 0;
-  static int stackA[256];
+  // int stackApos = 0, stackXpos = 0, stackYpos = 0;
+  // static int stackA[256];
 
   int atk_count = 1;
   int atk31F4 = 0, atk31F5 = 0, atk31F7 = 0, atk31F8 = 0, atk31F9 = 0,
@@ -130,7 +130,7 @@ int main(int argc, char *argv[]) {
 
   // スタック配列クリア
   memset(a31DC, 0, sizeof(a31DC));
-  memset(stackA, 0, sizeof(stackA));
+  // memset(stackA, 0, sizeof(stackA));
 
   timer = time(NULL);
   local_time = localtime(&timer);
@@ -183,7 +183,7 @@ int main(int argc, char *argv[]) {
     a31FB = 0;
     A = 1;
     a31FA = A;
-    stackApos = 0;
+    // stackApos = 0;
     C = 0;
 
     // // 試しにこのタイミングで配列を全走査して
@@ -232,8 +232,6 @@ int main(int argc, char *argv[]) {
       for (X = 0; X < atk_count; X++) {
         A = a31DC[X];
 
-        // D8BD:
-        stackA[stackApos++] = A;
         for (Y = 0; Y < 8; Y++) {
           A = A << 1;
 
@@ -243,7 +241,7 @@ int main(int argc, char *argv[]) {
           } else {
             C = 0;
           }
-          stackA[stackApos++] = A;
+          temp = A;
           // 31F4と31F5を右1ビットローテート
           ror = a31F4 & 0x01;
           a31F4 = a31F4 >> 1;
@@ -265,27 +263,25 @@ int main(int argc, char *argv[]) {
           } else
             C = 0;
           A = A ^ 0xFF;
-          stackA[stackApos++] = A;
+          temp2 = A;
           A = A & 0x84;
           A = A ^ a31F4;
           a31F4 = A;
-          A = stackA[--stackApos];
+          A = temp2;
           A = A & 0x08;
           A = A ^ a31F5;
           a31F5 = A;
-          A = stackA[--stackApos];
+          A = temp;
         }
-        A = stackA[--stackApos]; // ここまでで31F4と31F5算出完了
+        // ここまでで31F4と31F5算出完了
 
         // D8A4: // 31F7と31F8を生成(Complete)
-        stackA[stackApos++] = A;
-        stackA[stackApos++] = A;
         A = a31F4;
         if (A >= 0xE5) {
           C = 1;
         } else
           C = 0; // C5の値でキャリーを生成
-        A = stackA[--stackApos];
+        A = a31DC[X];
         A = A + a31F7 + C;
         if (A > 0xFF) { // ADCのキャリー処理
           A = A & 0xFF;
@@ -301,7 +297,7 @@ int main(int argc, char *argv[]) {
         } else
           C = 0;
         a31F8 = A;
-        A = stackA[--stackApos];
+        A = a31DC[X];
 
         // 31F9生成をスキップ、計算済みの値を使う(kounoike)
         // // D89B: // 31F9を生成(Complete)
@@ -311,7 +307,6 @@ int main(int argc, char *argv[]) {
         // A = stackA[--stackApos];
 
         // D88F: // 31FAを生成
-        stackA[stackApos++] = A;
         // 31FAをローテート
         ror = a31FA & 0x01;
         a31FA = a31FA >> 1;
@@ -324,8 +319,6 @@ int main(int argc, char *argv[]) {
         } else
           C = 0;
         a31FA = A;
-
-        A = stackA[--stackApos];
 
         // 31FB生成をスキップ、計算済みの値にキャリー値のみ加算(kounoike)
         a31FB += C;
