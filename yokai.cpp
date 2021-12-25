@@ -79,6 +79,7 @@ static unsigned char next_char[] = {
     /* c->Next */ 0x36,
 };
 
+// #define A31FBDIFF 1
 #define A31FBDIFF 2
 
 // check digit計算
