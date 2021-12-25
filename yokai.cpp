@@ -506,6 +506,19 @@ int main(int argc, char *argv[]) {
           a31F9tmp ^= a31DC[i];
           break;
         }
+        // 11桁目を変化させて次の桁へ行こうとしているときは終了
+        if (i >= 9) {
+          // 抜ける前に残りを検索
+          ret = bulk_calc_digit(bulk_a31DC, atk_count, bulk_a31FBsum,
+                                bulk_a31F9tmp, atk31F4, atk31F5, atk31F7,
+                                atk31F8, atk31F9, atk31FA, atk31FB);
+          if (ret) {
+            // 見つかった
+            return 0;
+          }
+          printf("i==9;End.\n");
+          return 0;
+        }
         // 最終桁が0x36になった瞬間に脱出
         if (a31DC[atk_count - 1] > 0x35) {
           // 抜ける前に残りを検索
@@ -517,19 +530,6 @@ int main(int argc, char *argv[]) {
             return 0;
           }
           printf("End.\n");
-          return 0;
-        }
-        // 10桁目を変化させて次の桁へ行こうとしているときは終了
-        if (i == 9) {
-          // 抜ける前に残りを検索
-          ret = bulk_calc_digit(bulk_a31DC, atk_count, bulk_a31FBsum,
-                                bulk_a31F9tmp, atk31F4, atk31F5, atk31F7,
-                                atk31F8, atk31F9, atk31FA, atk31FB);
-          if (ret) {
-            // 見つかった
-            return 0;
-          }
-          printf("i==9;End.\n");
           return 0;
         }
       }
