@@ -82,20 +82,20 @@ static unsigned char next_char[] = {
 #define A31FBDIFF 2
 
 // check digit計算
-// 0: 見つからず
-// 非0: 見つかった
+// 64個まとめて計算することでSIMD命令に置き換えてくれてることを期待している
+// 0: 見つからず 非0: 見つかった
 int bulk_calc_digit(unsigned char bulk_a31DC[BULK_SIZE][256], int atk_count,
                     unsigned char *bulk_a31FBsum, unsigned char *bulk_a31F9tmp,
                     unsigned char atk31F4, unsigned char atk31F5,
                     unsigned char atk31F7, unsigned char atk31F8,
                     unsigned char atk31F9, unsigned char atk31FA,
                     unsigned char atk31FB) {
-  unsigned char a31F4[BULK_SIZE], a31F5[BULK_SIZE], a31F7[BULK_SIZE],
-      a31F8[BULK_SIZE], a31F9[BULK_SIZE], a31FA[BULK_SIZE], a31FB[BULK_SIZE];
-  unsigned char A[BULK_SIZE], C[BULK_SIZE], Z[BULK_SIZE], X, Y;
-  int i, j;
-  unsigned char temp[BULK_SIZE], temp2[BULK_SIZE];
-  unsigned char ror[BULK_SIZE];
+  alignas(64) unsigned char a31F4[BULK_SIZE], a31F5[BULK_SIZE],
+      a31F7[BULK_SIZE], a31F8[BULK_SIZE], a31F9[BULK_SIZE], a31FA[BULK_SIZE],
+      a31FB[BULK_SIZE];
+  alignas(64) unsigned char A[BULK_SIZE], C[BULK_SIZE], Z[BULK_SIZE];
+  alignas(64) unsigned char temp[BULK_SIZE], temp2[BULK_SIZE], ror[BULK_SIZE];
+  int i, j, X, Y;
 
   memset(a31F4, 0, sizeof(a31F4));
   memset(a31F5, 0, sizeof(a31F5));
