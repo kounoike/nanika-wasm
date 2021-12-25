@@ -116,14 +116,9 @@ int calc_digit(unsigned char *a31DC, int atk_count, int a31FBsum, int a31F9tmp,
     A = a31DC[X];
 
     for (Y = 0; Y < 8; Y++) {
-      A = A << 1;
+      C = (A & 0x80) >> 7;
+      A = (A << 1) & 0xFF;
 
-      if (A > 0xFF) {
-        C = 1;
-        A = A & 0xFF;
-      } else {
-        C = 0;
-      }
       temp = A;
       // 31F4と31F5を右1ビットローテート
       ror = a31F4 & 0x01;
@@ -138,13 +133,7 @@ int calc_digit(unsigned char *a31DC, int atk_count, int a31FBsum, int a31F9tmp,
 
       // printf("ror %02X %02X\n",a31F4,a31F5);
 
-      A = 0;
-      A = 0xFF + C;
-      if (A > 0xFF) {
-        A = 0;
-        C = 1;
-      } else
-        C = 0;
+      A = C > 0 ? 0 : 0xFF;
       A = A ^ 0xFF;
       temp2 = A;
       A = A & 0x84;
@@ -160,25 +149,16 @@ int calc_digit(unsigned char *a31DC, int atk_count, int a31FBsum, int a31F9tmp,
 
     // D8A4: // 31F7と31F8を生成(Complete)
     A = a31F4;
-    if (A >= 0xE5) {
-      C = 1;
-    } else
-      C = 0; // C5の値でキャリーを生成
+    C = A >= 0xE5 ? 1 : 0;
     A = a31DC[X];
-    A = A + a31F7 + C;
-    if (A > 0xFF) { // ADCのキャリー処理
-      A = A & 0xFF;
-      C = 1;
-    } else
-      C = 0;
+    temp = A;
+    A = (unsigned char)(A + a31F7 + C);
+    C = (A < temp || (C > 0 && A == temp)) ? 1 : 0; // ADCのキャリー処理
     a31F7 = A;
     A = a31F8;
-    A = A + a31F5 + C;
-    if (A > 0xFF) { // ADCのキャリー処理
-      A = A & 0xFF;
-      C = 1;
-    } else
-      C = 0;
+    temp = A;
+    A = (unsigned char)(A + a31F5 + C);
+    C = (A < temp || (C > 0 && A == temp)) ? 1 : 0; // ADCのキャリー処理
     a31F8 = A;
     A = a31DC[X];
 
