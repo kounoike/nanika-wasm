@@ -444,8 +444,9 @@ int main(int argc, char *argv[]) {
       if (a31FBsum + A31FBDIFF < atk31FB) {
         int partial_sum = a31FBsum;
         for (i = 0; i < atk_count; i++) {
+          // 前の桁から4になる文字に置き換えて考えて、
           partial_sum += 4 - a31FBskip[a31DC[i]];
-          if (partial_sum >= atk31FB) {
+          if (partial_sum + A31FBDIFF >= atk31FB) {
             loop_start = i;
             break;
           }
@@ -457,7 +458,7 @@ int main(int argc, char *argv[]) {
         int partial_sum = a31FBsum;
         for (i = 0; i < atk_count; i++) {
           partial_sum -= a31FBskip[a31DC[i]];
-          if (partial_sum - a31FBskip[a31DC[i]] <= atk31FB + 1) {
+          if (partial_sum <= atk31FB + 1) {
             loop_start = i;
             break;
           }
