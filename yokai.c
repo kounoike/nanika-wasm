@@ -87,13 +87,12 @@ int calc_digit(unsigned char *a31DC, int atk_count, int a31FBsum, int a31F9tmp,
                unsigned char atk31F7, unsigned char atk31F8,
                unsigned char atk31F9, unsigned char atk31FA,
                unsigned char atk31FB) {
-  int a31F6 = 0; // 文字列長さ
-  int a31F4 = 0, a31F5 = 0, a31F7 = 0, a31F8 = 0, a31F9 = 0, a31FA = 0,
-      a31FB = 0;
-  int A = 0, X = 0, Y = 0, C = 0, Z = 0;
+  unsigned char a31F4 = 0, a31F5 = 0, a31F7 = 0, a31F8 = 0, a31F9 = 0,
+                a31FA = 0, a31FB = 0;
+  unsigned char A = 0, X = 0, Y = 0, C = 0, Z = 0;
   int i, j;
   unsigned char temp = 0, temp2 = 0;
-  int ror = 0;
+  unsigned char ror = 0;
 
   time_t timer;
   struct tm *local_time;
@@ -117,7 +116,7 @@ int calc_digit(unsigned char *a31DC, int atk_count, int a31FBsum, int a31F9tmp,
 
     for (Y = 0; Y < 8; Y++) {
       C = (A & 0x80) >> 7;
-      A = (A << 1) & 0xFF;
+      A = A << 1;
 
       temp = A;
       // 31F4と31F5を右1ビットローテート
@@ -152,12 +151,12 @@ int calc_digit(unsigned char *a31DC, int atk_count, int a31FBsum, int a31F9tmp,
     C = A >= 0xE5 ? 1 : 0;
     A = a31DC[X];
     temp = A;
-    A = (unsigned char)(A + a31F7 + C);
+    A = A + a31F7 + C;
     C = (A < temp || (C > 0 && A == temp)) ? 1 : 0; // ADCのキャリー処理
     a31F7 = A;
     A = a31F8;
     temp = A;
-    A = (unsigned char)(A + a31F5 + C);
+    A = A + a31F5 + C;
     C = (A < temp || (C > 0 && A == temp)) ? 1 : 0; // ADCのキャリー処理
     a31F8 = A;
     A = a31DC[X];
@@ -175,12 +174,9 @@ int calc_digit(unsigned char *a31DC, int atk_count, int a31FBsum, int a31F9tmp,
     a31FA = a31FA >> 1;
     a31FA = a31FA | (C << 7); // $31F8のCがここで入る
     C = ror;
+    temp = A;
     A = A + a31FA + C;
-    if (A > 0xFF) { // ADCのキャリー処理
-      A = A & 0xFF;
-      C = 1;
-    } else
-      C = 0;
+    C = (A < temp || (C > 0 && A == temp)) ? 1 : 0; // ADCのキャリー処理
     a31FA = A;
 
     // 31FB生成をスキップ、計算済みの値にキャリー値のみ加算(kounoike)
