@@ -440,10 +440,10 @@ int main(int argc, char *argv[]) {
 
     do {
       // a31FBsumが足りないときは大きく動かす
-      int loop_start = 0;
+      int loop_start = atk_count - 1;
       if (a31FBsum + A31FBDIFF < atk31FB) {
         int partial_sum = a31FBsum;
-        for (i = 0; i < atk_count; i++) {
+        for (i = loop_start; i >= 0; i--) {
           // 前の桁から4になる文字に置き換えて考えて、
           partial_sum += 4 - a31FBskip[a31DC[i]];
           if (partial_sum + A31FBDIFF >= atk31FB) {
@@ -456,7 +456,7 @@ int main(int argc, char *argv[]) {
       // 大きすぎるときも大きく動かす
       if (a31FBsum > atk31FB) {
         int partial_sum = a31FBsum;
-        for (i = 0; i < atk_count; i++) {
+        for (i = loop_start; i >= 0; i--) {
           partial_sum -= a31FBskip[a31DC[i]];
           if (partial_sum <= atk31FB + 1) {
             loop_start = i;
@@ -466,14 +466,15 @@ int main(int argc, char *argv[]) {
       }
       // printf("loop_start: [%d]\n", loop_start);
 
-      // 0x00-0x35の範囲でループさせる
-      for (i = 0; i < loop_start; i++) {
+      for (i = loop_start + 1; i < atk_count; i++) {
         a31FBsum -= a31FBskip[a31DC[i]];
         a31F9tmp ^= a31DC[i];
         a31DC[i] = 0x00;
       }
-      for (i = loop_start; i < atk_count; i++) {
-        if (i == 0) {
+
+      // 0x00-0x35の範囲でループさせる
+      for (i = loop_start; i >= 0; i--) {
+        if (i == atk_count - 1) {
           // 最初の文字を変えるとき
           // 31F9が一致していない→一致する値（0x35を超えてたら後ろで次の桁へ回す処理が働く）
           // 31F9が一致している　→0x36を入れる（0x35を超えているので後ろで次の桁へ回す処理が働く）
@@ -506,21 +507,8 @@ int main(int argc, char *argv[]) {
           a31F9tmp ^= a31DC[i];
           break;
         }
-        // 11桁目を変化させて次の桁へ行こうとしているときは終了
-        if (i >= 9) {
-          // 抜ける前に残りを検索
-          ret = bulk_calc_digit(bulk_a31DC, atk_count, bulk_a31FBsum,
-                                bulk_a31F9tmp, atk31F4, atk31F5, atk31F7,
-                                atk31F8, atk31F9, atk31FA, atk31FB);
-          if (ret) {
-            // 見つかった
-            return 0;
-          }
-          printf("i==9;End.\n");
-          return 0;
-        }
         // 最終桁が0x36になった瞬間に脱出
-        if (a31DC[atk_count - 1] > 0x35) {
+        if (a31DC[0] > 0x35) {
           // 抜ける前に残りを検索
           ret = bulk_calc_digit(bulk_a31DC, atk_count, bulk_a31FBsum,
                                 bulk_a31F9tmp, atk31F4, atk31F5, atk31F7,
