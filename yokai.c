@@ -7,6 +7,8 @@
 #include <string.h>
 #include <time.h>
 
+#define BULK_SIZE 64
+
 // 文字コード変換テーブル
 static unsigned char atoy[] = {
     'A', 'H', 'O', 'V', '1', '6', '*', '*', 'B', 'I', 'P', 'W', '2', '7',
@@ -82,11 +84,12 @@ static unsigned char next_char[] = {
 // check digit計算
 // 0: 見つからず
 // 非0: 見つかった
-int calc_digit(unsigned char *a31DC, int atk_count, int a31FBsum, int a31F9tmp,
-               unsigned char atk31F4, unsigned char atk31F5,
-               unsigned char atk31F7, unsigned char atk31F8,
-               unsigned char atk31F9, unsigned char atk31FA,
-               unsigned char atk31FB) {
+int bulk_calc_digit(unsigned char bulk_a31DC[BULK_SIZE][256], int atk_count,
+                    unsigned char *bulk_a31FBsum, unsigned char *bulk_a31F9tmp,
+                    unsigned char atk31F4, unsigned char atk31F5,
+                    unsigned char atk31F7, unsigned char atk31F8,
+                    unsigned char atk31F9, unsigned char atk31FA,
+                    unsigned char atk31FB) {
   unsigned char a31F4 = 0, a31F5 = 0, a31F7 = 0, a31F8 = 0, a31F9 = 0,
                 a31FA = 0, a31FB = 0;
   unsigned char A = 0, X = 0, Y = 0, C = 0, Z = 0;
@@ -108,136 +111,145 @@ int calc_digit(unsigned char *a31DC, int atk_count, int a31FBsum, int a31F9tmp,
   // }
   // printf("\n");
 
-  a31FB = a31FBsum;
-  a31F9 = a31F9tmp;
+  for (j = 0; j < BULK_SIZE; j++) {
+    unsigned char *a31DC = bulk_a31DC[j];
 
-  for (X = 0; X < atk_count; X++) {
-    A = a31DC[X];
+    a31F4 = 0, a31F5 = 0, a31F7 = 0, a31F8 = 0, a31FA = 0;
 
-    for (Y = 0; Y < 8; Y++) {
-      C = (A & 0x80) >> 7;
-      A = A << 1;
+    a31FB = bulk_a31FBsum[j];
+    a31F9 = bulk_a31F9tmp[j];
+    A = 0, X = 0, Y = 0, C = 0, Z = 0;
+    temp = 0, temp2 = 0;
+    ror = 0;
 
+    for (X = 0; X < atk_count; X++) {
+      A = a31DC[X];
+
+      for (Y = 0; Y < 8; Y++) {
+        C = (A & 0x80) >> 7;
+        A = A << 1;
+
+        temp = A;
+        // 31F4と31F5を右1ビットローテート
+        ror = a31F4 & 0x01;
+        a31F4 = a31F4 >> 1;
+        a31F4 = a31F4 | (C << 7); // C0000000
+        C = ror;
+
+        ror = a31F5 & 0x01;
+        a31F5 = a31F5 >> 1;
+        a31F5 = a31F5 | (C << 7); // C0000000
+        C = ror;
+
+        // printf("ror %02X %02X\n",a31F4,a31F5);
+
+        A = C > 0 ? 0 : 0xFF;
+        A = A ^ 0xFF;
+        temp2 = A;
+        A = A & 0x84;
+        A = A ^ a31F4;
+        a31F4 = A;
+        A = temp2;
+        A = A & 0x08;
+        A = A ^ a31F5;
+        a31F5 = A;
+        A = temp;
+      }
+      // ここまでで31F4と31F5算出完了
+
+      // D8A4: // 31F7と31F8を生成(Complete)
+      A = a31F4;
+      C = A >= 0xE5 ? 1 : 0;
+      A = a31DC[X];
       temp = A;
-      // 31F4と31F5を右1ビットローテート
-      ror = a31F4 & 0x01;
-      a31F4 = a31F4 >> 1;
-      a31F4 = a31F4 | (C << 7); // C0000000
+      A = A + a31F7 + C;
+      C = (A < temp || (C > 0 && A == temp)) ? 1 : 0; // ADCのキャリー処理
+      a31F7 = A;
+      A = a31F8;
+      temp = A;
+      A = A + a31F5 + C;
+      C = (A < temp || (C > 0 && A == temp)) ? 1 : 0; // ADCのキャリー処理
+      a31F8 = A;
+      A = a31DC[X];
+
+      // 31F9生成をスキップ、計算済みの値を使う(kounoike)
+      // // D89B: // 31F9を生成(Complete)
+      // stackA[stackApos++] = A;
+      // A = A ^ a31F9;
+      // a31F9 = A;
+      // A = stackA[--stackApos];
+
+      // D88F: // 31FAを生成
+      // 31FAをローテート
+      ror = a31FA & 0x01;
+      a31FA = a31FA >> 1;
+      a31FA = a31FA | (C << 7); // $31F8のCがここで入る
       C = ror;
+      temp = A;
+      A = A + a31FA + C;
+      C = (A < temp || (C > 0 && A == temp)) ? 1 : 0; // ADCのキャリー処理
+      a31FA = A;
 
-      ror = a31F5 & 0x01;
-      a31F5 = a31F5 >> 1;
-      a31F5 = a31F5 | (C << 7); // C0000000
-      C = ror;
+      // 31FB生成をスキップ、計算済みの値にキャリー値のみ加算(kounoike)
+      a31FB += C;
 
-      // printf("ror %02X %02X\n",a31F4,a31F5);
+      //   // D87F:
+      //   stackA[stackApos++] = A;
+      // D880: // 31FBを生成
+      //   // Aを左ローテート
+      //   A = A << 1;
+      //   if (A > 0xFF) { // ADCのキャリー処理
+      //     A = A & 0xFF;
+      //     C = 1;
+      //   } // ここにelseが入っていないのはバグ？(kounoike)
+      //   if (A == 0)
+      //     Z = 1;
+      //   else
+      //     Z = 0; // 演算結果がゼロの時Z=1;
 
-      A = C > 0 ? 0 : 0xFF;
-      A = A ^ 0xFF;
-      temp2 = A;
-      A = A & 0x84;
-      A = A ^ a31F4;
-      a31F4 = A;
-      A = temp2;
-      A = A & 0x08;
-      A = A ^ a31F5;
-      a31F5 = A;
-      A = temp;
+      //   stackA[stackApos++] = A; // スタックに値を保存
+      //   A = a31FB;
+      //   A = A + C;
+      //   if (A > 0xFF) { // ADCのキャリー処理
+      //     A = A & 0xFF;
+      //     C = 1;
+      //   } else
+      //     C = 0;
+      //   a31FB = A;
+
+      //   A = stackA[--stackApos];
+      // if (!Z)
+      //   goto D880; // ローテ終わるまでループ
+      // printf("a31FB=%x ",a31FB);
+
+      // A = stackA[--stackApos];
     }
-    // ここまでで31F4と31F5算出完了
 
-    // D8A4: // 31F7と31F8を生成(Complete)
-    A = a31F4;
-    C = A >= 0xE5 ? 1 : 0;
-    A = a31DC[X];
-    temp = A;
-    A = A + a31F7 + C;
-    C = (A < temp || (C > 0 && A == temp)) ? 1 : 0; // ADCのキャリー処理
-    a31F7 = A;
-    A = a31F8;
-    temp = A;
-    A = A + a31F5 + C;
-    C = (A < temp || (C > 0 && A == temp)) ? 1 : 0; // ADCのキャリー処理
-    a31F8 = A;
-    A = a31DC[X];
+    // tmpを代入するようになったのでチェックプリント外す
+    // if (a31F9tmp != a31F9) {
+    //   printf("a31F9 not match! a31F9:[%02X] a31F9tmp:[%02X]\n", a31F9,
+    //          a31F9tmp);
+    // }
 
-    // 31F9生成をスキップ、計算済みの値を使う(kounoike)
-    // // D89B: // 31F9を生成(Complete)
-    // stackA[stackApos++] = A;
-    // A = A ^ a31F9;
-    // a31F9 = A;
-    // A = stackA[--stackApos];
-
-    // D88F: // 31FAを生成
-    // 31FAをローテート
-    ror = a31FA & 0x01;
-    a31FA = a31FA >> 1;
-    a31FA = a31FA | (C << 7); // $31F8のCがここで入る
-    C = ror;
-    temp = A;
-    A = A + a31FA + C;
-    C = (A < temp || (C > 0 && A == temp)) ? 1 : 0; // ADCのキャリー処理
-    a31FA = A;
-
-    // 31FB生成をスキップ、計算済みの値にキャリー値のみ加算(kounoike)
-    a31FB += C;
-
-    //   // D87F:
-    //   stackA[stackApos++] = A;
-    // D880: // 31FBを生成
-    //   // Aを左ローテート
-    //   A = A << 1;
-    //   if (A > 0xFF) { // ADCのキャリー処理
-    //     A = A & 0xFF;
-    //     C = 1;
-    //   } // ここにelseが入っていないのはバグ？(kounoike)
-    //   if (A == 0)
-    //     Z = 1;
-    //   else
-    //     Z = 0; // 演算結果がゼロの時Z=1;
-
-    //   stackA[stackApos++] = A; // スタックに値を保存
-    //   A = a31FB;
-    //   A = A + C;
-    //   if (A > 0xFF) { // ADCのキャリー処理
-    //     A = A & 0xFF;
-    //     C = 1;
-    //   } else
-    //     C = 0;
-    //   a31FB = A;
-
-    //   A = stackA[--stackApos];
-    // if (!Z)
-    //   goto D880; // ローテ終わるまでループ
-    // printf("a31FB=%x ",a31FB);
-
-    // A = stackA[--stackApos];
-  }
-
-  // tmpを代入するようになったのでチェックプリント外す
-  // if (a31F9tmp != a31F9) {
-  //   printf("a31F9 not match! a31F9:[%02X] a31F9tmp:[%02X]\n", a31F9,
-  //          a31F9tmp);
-  // }
-
-  // 検算終了後にチェック
-  if (a31F4 == atk31F4 && a31F5 == atk31F5) {
-    if (a31F7 == atk31F7 && a31F8 == atk31F8 && a31F9 == atk31F9 &&
-        a31FA == atk31FA && a31FB == atk31FB) {
-      timer = time(NULL);
-      local_time = localtime(&timer);
-      printf("%02d:%02d:%02d - ", local_time->tm_hour, local_time->tm_min,
-             local_time->tm_sec);
-      printf("Hit! : ");
-      for (i = 0; i < atk_count; i++) {
-        printf("%02X ", a31DC[i]);
+    // 検算終了後にチェック
+    if (a31F4 == atk31F4 && a31F5 == atk31F5) {
+      if (a31F7 == atk31F7 && a31F8 == atk31F8 && a31F9 == atk31F9 &&
+          a31FA == atk31FA && a31FB == atk31FB) {
+        timer = time(NULL);
+        local_time = localtime(&timer);
+        printf("%02d:%02d:%02d - ", local_time->tm_hour, local_time->tm_min,
+               local_time->tm_sec);
+        printf("Hit! : ");
+        for (i = 0; i < atk_count; i++) {
+          printf("%02X ", a31DC[i]);
+        }
+        printf("= ");
+        for (i = 0; i < atk_count; i++) {
+          printf("%c", atoy[a31DC[i]]);
+        }
+        printf("\n");
+        return 1;
       }
-      printf("= ");
-      for (i = 0; i < atk_count; i++) {
-        printf("%c", atoy[a31DC[i]]);
-      }
-      printf("\n");
-      return 1;
     }
   }
   return 0;
@@ -247,7 +259,12 @@ int calc_digit(unsigned char *a31DC, int atk_count, int a31FBsum, int a31F9tmp,
 int main(int argc, char *argv[]) {
 
   printf("yokai-test03 brute force atk\n");
+  int bulk_idx = 0;
   unsigned char a31DC[256];
+  unsigned char bulk_a31DC[BULK_SIZE][256];
+  unsigned char a31FBsum = 0, a31F9tmp = 0;
+  unsigned char bulk_a31FBsum[BULK_SIZE], bulk_a31F9tmp[BULK_SIZE];
+
   int i = 0, j = 0;
   int ret;
   // int stackApos = 0, stackXpos = 0, stackYpos = 0;
@@ -257,8 +274,6 @@ int main(int argc, char *argv[]) {
   int atk31F4 = 0, atk31F5 = 0, atk31F7 = 0, atk31F8 = 0, atk31F9 = 0,
       atk31FA = 0, atk31FB = 0;
 
-  int a31FBsum = 0;
-  unsigned char a31F9tmp = 0;
   int ror = 0;
   int continue_count = 0;
 
@@ -363,11 +378,19 @@ int main(int argc, char *argv[]) {
     }
 
     if (need_check) {
-      ret = calc_digit(a31DC, atk_count, a31FBsum, a31F9tmp, atk31F4, atk31F5,
-                       atk31F7, atk31F8, atk31F9, atk31FA, atk31FB);
-      if (ret) {
-        // 見つかった
-        return 0;
+      memcpy(bulk_a31DC[bulk_idx], a31DC, atk_count);
+      bulk_a31FBsum[bulk_idx] = a31FBsum;
+      bulk_a31F9tmp[bulk_idx] = a31F9tmp;
+      bulk_idx++;
+      if (bulk_idx == BULK_SIZE) {
+        ret = bulk_calc_digit(bulk_a31DC, atk_count, bulk_a31FBsum,
+                              bulk_a31F9tmp, atk31F4, atk31F5, atk31F7, atk31F8,
+                              atk31F9, atk31FA, atk31FB);
+        if (ret) {
+          // 見つかった
+          return 0;
+        }
+        bulk_idx = 0;
       }
     }
 
@@ -440,10 +463,26 @@ int main(int argc, char *argv[]) {
         }
         // 最終桁が0x36になった瞬間に脱出
         if (a31DC[atk_count - 1] > 0x35) {
+          // 抜ける前に残りを検索
+          ret = bulk_calc_digit(bulk_a31DC, atk_count, bulk_a31FBsum,
+                                bulk_a31F9tmp, atk31F4, atk31F5, atk31F7,
+                                atk31F8, atk31F9, atk31FA, atk31FB);
+          if (ret) {
+            // 見つかった
+            return 0;
+          }
           printf("End.\n");
           return 0;
         }
         if (i == 9) {
+          // 抜ける前に残りを検索
+          ret = bulk_calc_digit(bulk_a31DC, atk_count, bulk_a31FBsum,
+                                bulk_a31F9tmp, atk31F4, atk31F5, atk31F7,
+                                atk31F8, atk31F9, atk31FA, atk31FB);
+          if (ret) {
+            // 見つかった
+            return 0;
+          }
           printf("i==9;End.\n");
           return 0;
         }
