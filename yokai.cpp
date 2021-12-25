@@ -251,19 +251,32 @@ int bulk_calc_digit(unsigned char bulk_a31DC[BULK_SIZE][256], int atk_count,
       if (a31F7[idx] == atk31F7 && a31F8[idx] == atk31F8 &&
           a31F9[idx] == atk31F9 && a31FA[idx] == atk31FA &&
           a31FB[idx] == atk31FB) {
+        char filename[300];
+        char ext[] = ".hit.txt";
+        for (i = 0; i < atk_count; i++) {
+          filename[i] = atoy[bulk_a31DC[idx][i]];
+        }
+        strncpy(&filename[atk_count], ext, strlen(ext) + 1);
+        FILE *fp = fopen(filename, "w");
         timer = time(NULL);
         local_time = localtime(&timer);
         printf("%02d:%02d:%02d - ", local_time->tm_hour, local_time->tm_min,
                local_time->tm_sec);
         printf("Hit! : ");
+        fprintf(fp, "Hit! : ");
         for (i = 0; i < atk_count; i++) {
           printf("%02X ", bulk_a31DC[idx][i]);
+          fprintf(fp, "%02X ", bulk_a31DC[idx][i]);
         }
         printf("= ");
+        fprintf(fp, "= ");
         for (i = 0; i < atk_count; i++) {
           printf("%c", atoy[bulk_a31DC[idx][i]]);
+          fprintf(fp, "%c", atoy[bulk_a31DC[idx][i]]);
         }
         printf("\n");
+        fprintf(fp, "\n");
+        fclose(fp);
         return 1;
       }
     }
