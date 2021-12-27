@@ -82,6 +82,107 @@ static unsigned char next_char[] = {
 // #define A31FBDIFF 1
 #define A31FBDIFF 2
 
+// 文字のビットを上下反転するテーブル
+unsigned char lut_reverse_char_bit[] = {
+  0b00000000,
+  0b10000000,
+  0b01000000,
+  0b11000000,
+  0b00100000,
+  0b10100000,
+  0b01100000,
+  0b11100000,
+  0b00010000,
+  0b10010000,
+  0b01010000,
+  0b11010000,
+  0b00110000,
+  0b10110000,
+  0b01110000,
+  0b11110000,
+  0b00001000,
+  0b10001000,
+  0b01001000,
+  0b11001000,
+  0b00101000,
+  0b10101000,
+  0b01101000,
+  0b11101000,
+  0b00011000,
+  0b10011000,
+  0b01011000,
+  0b11011000,
+  0b00111000,
+  0b10111000,
+  0b01111000,
+  0b11111000,
+  0b00000100,
+  0b10000100,
+  0b01000100,
+  0b11000100,
+  0b00100100,
+  0b10100100,
+  0b01100100,
+  0b11100100,
+  0b00010100,
+  0b10010100,
+  0b01010100,
+  0b11010100,
+  0b00110100,
+  0b10110100,
+  0b01110100,
+  0b11110100,
+  0b00001100,
+  0b10001100,
+  0b01001100,
+  0b11001100,
+  0b00101100,
+  0b10101100,
+  0b01101100,
+  0b11101100,
+  0b00011100,
+  0b10011100,
+  0b01011100,
+  0b11011100,
+  0b00111100,
+  0b10111100,
+  0b01111100,
+  0b11111100, // 0x35まであればいいからこのくらい。
+};
+
+// $31F5によって決まる、xor取る値を入れたテーブル
+unsigned char lut_31F4_xor[256];
+unsigned char lut_31F5_xor[256];
+
+void create_lut(){
+  for(int t31F5 = 0; t31F5 < 256; t31F5++) {
+    int A = 0;
+    int C = 0;
+    int a31F4 = 0;
+    int a31F5 = t31F5;
+    for (int Y = 0; Y < 8; Y++) {
+      C = A & 0x01;
+      A >>= 1;
+
+      a31F4 |= C << 8;
+      C = a31F4 & 0x01;
+      a31F4 >>= 1;
+
+      a31F5 |= C << 8;
+      C = a31F5 & 0x01;
+      a31F5 >>= 1;
+
+      if (C > 0) {
+        a31F4 = (a31F4 ^ 0x84) & 0xFF;
+        a31F5 = (a31F5 ^ 0x08) & 0xFF;
+      }
+    }
+    lut_31F4_xor[t31F5] = a31F4 & 0xFF;
+    lut_31F5_xor[t31F5] = a31F5 & 0xFF;
+  }
+}
+
+
 // check digit計算
 // 64個まとめて計算することでSIMD命令に置き換えてくれてることを期待している
 // 0: 見つからず 非0: 見つかった
@@ -93,7 +194,7 @@ int bulk_calc_digit(unsigned char bulk_a31DC[16][BULK_SIZE], int atk_count,
                     unsigned char atk31FB) {
   alignas(64) unsigned char a31F4[BULK_SIZE], a31F5[BULK_SIZE],
       a31F7[BULK_SIZE], a31F8[BULK_SIZE], a31F9[BULK_SIZE], a31FA[BULK_SIZE],
-      a31FB[BULK_SIZE];
+      a31FB[BULK_SIZE], a31F4test[BULK_SIZE], a31F5test[BULK_SIZE];
   alignas(64) unsigned char A[BULK_SIZE], C[BULK_SIZE];
   alignas(64) unsigned char C1[BULK_SIZE];
   int i, j, X, Y;
@@ -124,31 +225,18 @@ int bulk_calc_digit(unsigned char bulk_a31DC[16][BULK_SIZE], int atk_count,
   // printf("\n");
 
   for (X = 0; X < atk_count; X++) {
+    unsigned char xor31F4[BULK_SIZE], xor31F5[BULK_SIZE], rev[BULK_SIZE];
+
     for (int idx = 0; idx < BULK_SIZE; idx++)
-      A[idx] = bulk_a31DC[X][idx];
-
-    for (Y = 0; Y < 8; Y++) {
-      for (int idx = 0; idx < BULK_SIZE; idx++)
-        C[idx] = A[idx] & 0x80; // どうせ7bitシフトして戻す
-      for (int idx = 0; idx < BULK_SIZE; idx++)
-        A[idx] <<= 1;
-
-      // 31F4と31F5を右1ビットローテート
-      for (int idx = 0; idx < BULK_SIZE; idx++)
-        C1[idx] = a31F4[idx] & 0x01;
-      for (int idx = 0; idx < BULK_SIZE; idx++)
-        a31F4[idx] = (a31F4[idx] >> 1) | C[idx];
-
-      for (int idx = 0; idx < BULK_SIZE; idx++)
-        C[idx] = a31F5[idx] & 0x01;
-      for (int idx = 0; idx < BULK_SIZE; idx++)
-        a31F5[idx] = (a31F5[idx] >> 1) | (C1[idx] << 7);
-
-      for (int idx = 0; idx < BULK_SIZE; idx++)
-        a31F4[idx] ^= C[idx] > 0 ? 0x84 : 0;
-      for (int idx = 0; idx < BULK_SIZE; idx++)
-        a31F5[idx] ^= C[idx] > 0 ? 0x08 : 0;
-    }
+      rev[idx] = lut_reverse_char_bit[bulk_a31DC[X][idx]];
+    for (int idx = 0; idx < BULK_SIZE; idx++)
+      xor31F4[idx] = lut_31F4_xor[a31F5[idx]];
+    for (int idx = 0; idx < BULK_SIZE; idx++)
+      xor31F5[idx] = lut_31F5_xor[a31F5[idx]];
+    for (int idx = 0; idx < BULK_SIZE; idx++)
+      a31F5[idx] = a31F4[idx] ^ xor31F5[idx];
+    for (int idx = 0; idx < BULK_SIZE; idx++)
+      a31F4[idx] = rev[idx] ^ xor31F4[idx];
     // ここまでで31F4と31F5算出完了
 
     // D8A4: // 31F7と31F8を生成(Complete)
@@ -269,6 +357,7 @@ int bulk_calc_digit(unsigned char bulk_a31DC[16][BULK_SIZE], int atk_count,
 
 // メイン
 int main(int argc, char *argv[]) {
+  create_lut();
 
   printf("yokai-test03 brute force atk\n");
   int bulk_idx = 0;
