@@ -94,8 +94,8 @@ int bulk_calc_digit(unsigned char bulk_a31DC[16][BULK_SIZE], int atk_count,
   alignas(64) unsigned char a31F4[BULK_SIZE], a31F5[BULK_SIZE],
       a31F7[BULK_SIZE], a31F8[BULK_SIZE], a31F9[BULK_SIZE], a31FA[BULK_SIZE],
       a31FB[BULK_SIZE];
-  alignas(64) unsigned char A[BULK_SIZE], C[BULK_SIZE], Z[BULK_SIZE];
-  alignas(64) unsigned char temp[BULK_SIZE], temp2[BULK_SIZE], ror[BULK_SIZE];
+  alignas(64) unsigned char A[BULK_SIZE], C[BULK_SIZE];
+  alignas(64) unsigned char C1[BULK_SIZE];
   int i, j, X, Y;
 
   memset(a31F4, 0, sizeof(a31F4));
@@ -107,10 +107,7 @@ int bulk_calc_digit(unsigned char bulk_a31DC[16][BULK_SIZE], int atk_count,
   memcpy(a31FB, bulk_a31FBsum, sizeof(a31FB));
   memset(A, 0, sizeof(A));
   memset(C, 0, sizeof(C));
-  memset(Z, 0, sizeof(Z));
-  memset(temp, 0, sizeof(temp));
-  memset(temp2, 0, sizeof(temp2));
-  memset(ror, 0, sizeof(ror));
+  memset(C1, 0, sizeof(C1));
 
   time_t timer;
   struct tm *local_time;
@@ -138,14 +135,14 @@ int bulk_calc_digit(unsigned char bulk_a31DC[16][BULK_SIZE], int atk_count,
 
       // 31F4と31F5を右1ビットローテート
       for (int idx = 0; idx < BULK_SIZE; idx++)
-        ror[idx] = a31F4[idx] & 0x01;
+        C1[idx] = a31F4[idx] & 0x01;
       for (int idx = 0; idx < BULK_SIZE; idx++)
         a31F4[idx] = (a31F4[idx] >> 1) | (C[idx] << 7); // C0000000
 
       for (int idx = 0; idx < BULK_SIZE; idx++)
         C[idx] = a31F5[idx] & 0x01;
       for (int idx = 0; idx < BULK_SIZE; idx++)
-        a31F5[idx] = (a31F5[idx] >> 1) | (ror[idx] << 7); // C0000000
+        a31F5[idx] = (a31F5[idx] >> 1) | (C1[idx] << 7); // C0000000
 
       // printf("ror %02X %02X\n",a31F4,a31F5);
 
@@ -182,29 +179,18 @@ int bulk_calc_digit(unsigned char bulk_a31DC[16][BULK_SIZE], int atk_count,
     // D88F: // 31FAを生成
     // 31FAをローテート
     for (int idx = 0; idx < BULK_SIZE; idx++)
-      A[idx] = bulk_a31DC[X][idx];
-    for (int idx = 0; idx < BULK_SIZE; idx++)
-      ror[idx] = a31FA[idx] & 0x01;
+      C1[idx] = a31FA[idx] & 0x01;
     for (int idx = 0; idx < BULK_SIZE; idx++)
       a31FA[idx] = a31FA[idx] >> 1;
     for (int idx = 0; idx < BULK_SIZE; idx++)
       a31FA[idx] = a31FA[idx] | (C[idx] << 7); // $31F8のCがここで入る
     for (int idx = 0; idx < BULK_SIZE; idx++)
-      C[idx] = ror[idx];
-    for (int idx = 0; idx < BULK_SIZE; idx++)
-      temp[idx] = A[idx];
-    for (int idx = 0; idx < BULK_SIZE; idx++)
-      A[idx] = A[idx] + a31FA[idx] + C[idx];
-    for (int idx = 0; idx < BULK_SIZE; idx++)
-      C[idx] = (A[idx] < temp[idx] || (C[idx] > 0 && A[idx] == temp[idx]))
-                   ? 1
-                   : 0; // ADCのキャリー処理
-    for (int idx = 0; idx < BULK_SIZE; idx++)
-      a31FA[idx] = A[idx];
-
+      a31FA[idx] = bulk_a31DC[X][idx] + a31FA[idx] + C1[idx];
     // 31FB生成をスキップ、計算済みの値にキャリー値のみ加算(kounoike)
     for (int idx = 0; idx < BULK_SIZE; idx++)
-      a31FB[idx] += C[idx];
+      a31FB[idx] += (a31FA[idx] < bulk_a31DC[X][idx] || (C1[idx] > 0 && a31FA[idx] == bulk_a31DC[X][idx]))
+                   ? 1
+                   : 0; // ADCのキャリー処理
 
     //   // D87F:
     //   stackA[stackApos++] = A;
