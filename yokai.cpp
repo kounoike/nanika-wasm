@@ -129,27 +129,25 @@ int bulk_calc_digit(unsigned char bulk_a31DC[16][BULK_SIZE], int atk_count,
 
     for (Y = 0; Y < 8; Y++) {
       for (int idx = 0; idx < BULK_SIZE; idx++)
-        C[idx] = (A[idx] & 0x80) >> 7;
+        C[idx] = A[idx] & 0x80; // どうせ7bitシフトして戻す
       for (int idx = 0; idx < BULK_SIZE; idx++)
-        A[idx] = A[idx] << 1;
+        A[idx] <<= 1;
 
       // 31F4と31F5を右1ビットローテート
       for (int idx = 0; idx < BULK_SIZE; idx++)
         C1[idx] = a31F4[idx] & 0x01;
       for (int idx = 0; idx < BULK_SIZE; idx++)
-        a31F4[idx] = (a31F4[idx] >> 1) | (C[idx] << 7); // C0000000
+        a31F4[idx] = (a31F4[idx] >> 1) | C[idx];
 
       for (int idx = 0; idx < BULK_SIZE; idx++)
         C[idx] = a31F5[idx] & 0x01;
       for (int idx = 0; idx < BULK_SIZE; idx++)
-        a31F5[idx] = (a31F5[idx] >> 1) | (C1[idx] << 7); // C0000000
-
-      // printf("ror %02X %02X\n",a31F4,a31F5);
+        a31F5[idx] = (a31F5[idx] >> 1) | (C1[idx] << 7);
 
       for (int idx = 0; idx < BULK_SIZE; idx++)
-        a31F4[idx] = (C[idx] > 0 ? 0x84 : 0) ^ a31F4[idx];
+        a31F4[idx] ^= C[idx] > 0 ? 0x84 : 0;
       for (int idx = 0; idx < BULK_SIZE; idx++)
-        a31F5[idx] = (C[idx] > 0 ? 0x08 : 0) ^ a31F5[idx];
+        a31F5[idx] ^= C[idx] > 0 ? 0x08 : 0;
     }
     // ここまでで31F4と31F5算出完了
 
