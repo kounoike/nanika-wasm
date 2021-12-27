@@ -136,73 +136,41 @@ int bulk_calc_digit(unsigned char bulk_a31DC[16][BULK_SIZE], int atk_count,
       for (int idx = 0; idx < BULK_SIZE; idx++)
         A[idx] = A[idx] << 1;
 
-      for (int idx = 0; idx < BULK_SIZE; idx++)
-        temp[idx] = A[idx];
       // 31F4と31F5を右1ビットローテート
       for (int idx = 0; idx < BULK_SIZE; idx++)
         ror[idx] = a31F4[idx] & 0x01;
       for (int idx = 0; idx < BULK_SIZE; idx++)
         a31F4[idx] = (a31F4[idx] >> 1) | (C[idx] << 7); // C0000000
-      for (int idx = 0; idx < BULK_SIZE; idx++)
-        C[idx] = ror[idx];
 
       for (int idx = 0; idx < BULK_SIZE; idx++)
-        ror[idx] = a31F5[idx] & 0x01;
+        C[idx] = a31F5[idx] & 0x01;
       for (int idx = 0; idx < BULK_SIZE; idx++)
-        a31F5[idx] = (a31F5[idx] >> 1) | (C[idx] << 7); // C0000000
-      for (int idx = 0; idx < BULK_SIZE; idx++)
-        C[idx] = ror[idx];
+        a31F5[idx] = (a31F5[idx] >> 1) | (ror[idx] << 7); // C0000000
 
       // printf("ror %02X %02X\n",a31F4,a31F5);
 
       for (int idx = 0; idx < BULK_SIZE; idx++)
-        A[idx] = C[idx] > 0 ? 0 : 0xFF;
+        a31F4[idx] = (C[idx] > 0 ? 0x84 : 0) ^ a31F4[idx];
       for (int idx = 0; idx < BULK_SIZE; idx++)
-        A[idx] = A[idx] ^ 0xFF;
-      for (int idx = 0; idx < BULK_SIZE; idx++)
-        temp2[idx] = A[idx];
-      for (int idx = 0; idx < BULK_SIZE; idx++)
-        a31F4[idx] = (A[idx] & 0x84) ^ a31F4[idx];
-      for (int idx = 0; idx < BULK_SIZE; idx++)
-        A[idx] = temp2[idx];
-      for (int idx = 0; idx < BULK_SIZE; idx++)
-        a31F5[idx] = (A[idx] & 0x08) ^ a31F5[idx];
-      for (int idx = 0; idx < BULK_SIZE; idx++)
-        A[idx] = temp[idx];
+        a31F5[idx] = (C[idx] > 0 ? 0x08 : 0) ^ a31F5[idx];
     }
     // ここまでで31F4と31F5算出完了
 
     // D8A4: // 31F7と31F8を生成(Complete)
     for (int idx = 0; idx < BULK_SIZE; idx++)
-      A[idx] = a31F4[idx];
+      C[idx] = a31F4[idx] >= 0xE5 ? 1 : 0;
     for (int idx = 0; idx < BULK_SIZE; idx++)
-      C[idx] = A[idx] >= 0xE5 ? 1 : 0;
+      a31F7[idx] = bulk_a31DC[X][idx] + a31F7[idx] + C[idx];
     for (int idx = 0; idx < BULK_SIZE; idx++)
-      A[idx] = bulk_a31DC[X][idx];
-    for (int idx = 0; idx < BULK_SIZE; idx++)
-      temp[idx] = A[idx];
-    for (int idx = 0; idx < BULK_SIZE; idx++)
-      A[idx] = A[idx] + a31F7[idx] + C[idx];
-    for (int idx = 0; idx < BULK_SIZE; idx++)
-      C[idx] = (A[idx] < temp[idx] || (C[idx] > 0 && A[idx] == temp[idx]))
+      C[idx] = (a31F7[idx] < bulk_a31DC[X][idx] || (C[idx] > 0 && a31F7[idx] == bulk_a31DC[X][idx]))
                    ? 1
                    : 0; // ADCのキャリー処理
     for (int idx = 0; idx < BULK_SIZE; idx++)
-      a31F7[idx] = A[idx];
+      a31F8[idx] = a31F8[idx] + a31F5[idx] + C[idx];
     for (int idx = 0; idx < BULK_SIZE; idx++)
-      A[idx] = a31F8[idx];
-    for (int idx = 0; idx < BULK_SIZE; idx++)
-      temp[idx] = A[idx];
-    for (int idx = 0; idx < BULK_SIZE; idx++)
-      A[idx] = A[idx] + a31F5[idx] + C[idx];
-    for (int idx = 0; idx < BULK_SIZE; idx++)
-      C[idx] = (A[idx] < temp[idx] || (C[idx] > 0 && A[idx] == temp[idx]))
+      C[idx] = (a31F8[idx] < a31F5[idx] || (C[idx] > 0 && a31F8[idx] == a31F5[idx]))
                    ? 1
                    : 0; // ADCのキャリー処理
-    for (int idx = 0; idx < BULK_SIZE; idx++)
-      a31F8[idx] = A[idx];
-    for (int idx = 0; idx < BULK_SIZE; idx++)
-      A[idx] = bulk_a31DC[X][idx];
 
     // 31F9生成をスキップ、計算済みの値を使う(kounoike)
     // // D89B: // 31F9を生成(Complete)
@@ -213,6 +181,8 @@ int bulk_calc_digit(unsigned char bulk_a31DC[16][BULK_SIZE], int atk_count,
 
     // D88F: // 31FAを生成
     // 31FAをローテート
+    for (int idx = 0; idx < BULK_SIZE; idx++)
+      A[idx] = bulk_a31DC[X][idx];
     for (int idx = 0; idx < BULK_SIZE; idx++)
       ror[idx] = a31FA[idx] & 0x01;
     for (int idx = 0; idx < BULK_SIZE; idx++)
