@@ -85,7 +85,7 @@ static unsigned char next_char[] = {
 // check digit計算
 // 64個まとめて計算することでSIMD命令に置き換えてくれてることを期待している
 // 0: 見つからず 非0: 見つかった
-int bulk_calc_digit(unsigned char bulk_a31DC[BULK_SIZE][256], int atk_count,
+int bulk_calc_digit(unsigned char bulk_a31DC[16][BULK_SIZE], int atk_count,
                     unsigned char *bulk_a31FBsum, unsigned char *bulk_a31F9tmp,
                     unsigned char atk31F4, unsigned char atk31F5,
                     unsigned char atk31F7, unsigned char atk31F8,
@@ -128,7 +128,7 @@ int bulk_calc_digit(unsigned char bulk_a31DC[BULK_SIZE][256], int atk_count,
 
   for (X = 0; X < atk_count; X++) {
     for (int idx = 0; idx < BULK_SIZE; idx++)
-      A[idx] = bulk_a31DC[idx][X];
+      A[idx] = bulk_a31DC[X][idx];
 
     for (Y = 0; Y < 8; Y++) {
       for (int idx = 0; idx < BULK_SIZE; idx++)
@@ -178,7 +178,7 @@ int bulk_calc_digit(unsigned char bulk_a31DC[BULK_SIZE][256], int atk_count,
     for (int idx = 0; idx < BULK_SIZE; idx++)
       C[idx] = A[idx] >= 0xE5 ? 1 : 0;
     for (int idx = 0; idx < BULK_SIZE; idx++)
-      A[idx] = bulk_a31DC[idx][X];
+      A[idx] = bulk_a31DC[X][idx];
     for (int idx = 0; idx < BULK_SIZE; idx++)
       temp[idx] = A[idx];
     for (int idx = 0; idx < BULK_SIZE; idx++)
@@ -202,7 +202,7 @@ int bulk_calc_digit(unsigned char bulk_a31DC[BULK_SIZE][256], int atk_count,
     for (int idx = 0; idx < BULK_SIZE; idx++)
       a31F8[idx] = A[idx];
     for (int idx = 0; idx < BULK_SIZE; idx++)
-      A[idx] = bulk_a31DC[idx][X];
+      A[idx] = bulk_a31DC[X][idx];
 
     // 31F9生成をスキップ、計算済みの値を使う(kounoike)
     // // D89B: // 31F9を生成(Complete)
@@ -294,14 +294,14 @@ int bulk_calc_digit(unsigned char bulk_a31DC[BULK_SIZE][256], int atk_count,
         printf("Hit! : ");
         fprintf(fp, "Hit! : ");
         for (i = 0; i < atk_count; i++) {
-          printf("%02X ", bulk_a31DC[idx][i]);
-          fprintf(fp, "%02X ", bulk_a31DC[idx][i]);
+          printf("%02X ", bulk_a31DC[i][idx]);
+          fprintf(fp, "%02X ", bulk_a31DC[i][idx]);
         }
         printf("= ");
         fprintf(fp, "= ");
         for (i = 0; i < atk_count; i++) {
-          printf("%c", atoy[bulk_a31DC[idx][i]]);
-          fprintf(fp, "%c", atoy[bulk_a31DC[idx][i]]);
+          printf("%c", atoy[bulk_a31DC[i][idx]]);
+          fprintf(fp, "%c", atoy[bulk_a31DC[i][idx]]);
         }
         printf("\n");
         fprintf(fp, "\n");
@@ -319,7 +319,7 @@ int main(int argc, char *argv[]) {
   printf("yokai-test03 brute force atk\n");
   int bulk_idx = 0;
   unsigned char a31DC[256];
-  unsigned char bulk_a31DC[BULK_SIZE][256];
+  unsigned char bulk_a31DC[16][BULK_SIZE];
   unsigned char a31FBsum = 0, a31F9tmp = 0;
   unsigned char bulk_a31FBsum[BULK_SIZE], bulk_a31F9tmp[BULK_SIZE];
 
@@ -436,7 +436,9 @@ int main(int argc, char *argv[]) {
     }
 
     if (need_check) {
-      memcpy(bulk_a31DC[bulk_idx], a31DC, atk_count);
+      for(i = 0; i < atk_count; i++) {
+        bulk_a31DC[i][bulk_idx] = a31DC[i];
+      }
       bulk_a31FBsum[bulk_idx] = a31FBsum;
       bulk_a31F9tmp[bulk_idx] = a31F9tmp;
       bulk_idx++;
