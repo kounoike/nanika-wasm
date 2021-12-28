@@ -7,12 +7,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <thread>
 #include <time.h>
+#include <vector>
 
 #define BULK_SIZE 64
 
 // 文字コード変換テーブル
-static unsigned char atoy[256] = {
+unsigned char atoy[256] = {
     'A', 'H', 'O', 'V', '1', '6', '*', '*', 'B', 'I', 'P', 'W', '2', '7', '*',
     '*', 'C', 'J', 'Q', 'X', '3', '8', '*', '*', 'D', 'K', 'R', 'Y', '4', '9',
     '*', '*', 'E', 'L', 'S', 'Z', '5', '0', '*', '*', 'F', 'M', 'T', '-', 'n',
@@ -31,6 +33,12 @@ static unsigned char atoy[256] = {
     '*', '*', '*', '*', '*', '*', '*', '*', '*', '*', '*', '*', '*', '*', '*',
     '*', '*', '*', '*', '*', '*', '*', '*', '*', '*', '*', '*', '*', '*', '*',
     '*'};
+
+unsigned char itoa[42] = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x08, 0x09, 0x0a,
+                          0x0b, 0x0c, 0x0d, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15,
+                          0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x20, 0x21, 0x22,
+                          0x23, 0x24, 0x25, 0x28, 0x29, 0x2a, 0x2b, 0x2c, 0x2d,
+                          0x30, 0x31, 0x32, 0x33, 0x34, 0x35};
 
 // 次の妥当文字
 static unsigned char next_char[] = {
@@ -198,44 +206,7 @@ int bulk_calc_digit(unsigned char bulk_a31DC[16][BULK_SIZE], int atk_count,
                      (C1[idx] > 0 && a31FA[idx] == bulk_a31DC[X][idx]))
                         ? 1
                         : 0; // ADCのキャリー処理
-
-    //   // D87F:
-    //   stackA[stackApos++] = A;
-    // D880: // 31FBを生成
-    //   // Aを左ローテート
-    //   A = A << 1;
-    //   if (A > 0xFF) { // ADCのキャリー処理
-    //     A = A & 0xFF;
-    //     C = 1;
-    //   } // ここにelseが入っていないのはバグ？(kounoike)
-    //   if (A == 0)
-    //     Z = 1;
-    //   else
-    //     Z = 0; // 演算結果がゼロの時Z=1;
-
-    //   stackA[stackApos++] = A; // スタックに値を保存
-    //   A = a31FB;
-    //   A = A + C;
-    //   if (A > 0xFF) { // ADCのキャリー処理
-    //     A = A & 0xFF;
-    //     C = 1;
-    //   } else
-    //     C = 0;
-    //   a31FB = A;
-
-    //   A = stackA[--stackApos];
-    // if (!Z)
-    //   goto D880; // ローテ終わるまでループ
-    // printf("a31FB=%x ",a31FB);
-
-    // A = stackA[--stackApos];
   }
-
-  // tmpを代入するようになったのでチェックプリント外す
-  // if (a31F9tmp != a31F9) {
-  //   printf("a31F9 not match! a31F9:[%02X] a31F9tmp:[%02X]\n", a31F9,
-  //          a31F9tmp);
-  // }
 
   // 検算終了後にチェック
   for (int idx = 0; idx < BULK_SIZE; idx++) {
@@ -275,86 +246,32 @@ int bulk_calc_digit(unsigned char bulk_a31DC[16][BULK_SIZE], int atk_count,
   return 0;
 }
 
-// メイン
-int main(int argc, char *argv[]) {
+bool found = false;
 
-  printf("yokai-test03 brute force atk\n");
+void calc_thread(int thread_id, const unsigned char *start_a31DC, int atk_count,
+                 unsigned char atk31F4, unsigned char atk31F5,
+                 unsigned char atk31F7, unsigned char atk31F8,
+                 unsigned char atk31F9, unsigned char atk31FA,
+                 unsigned char atk31FB) {
   int bulk_idx = 0;
-  unsigned char a31DC[256];
+  unsigned char a31DC[16];
   unsigned char bulk_a31DC[16][BULK_SIZE];
   unsigned char a31FBsum = 0, a31F9tmp = 0;
   unsigned char bulk_a31FBsum[BULK_SIZE];
+  int i, j, ret;
 
-  int i = 0, j = 0;
-  int ret;
-  // int stackApos = 0, stackXpos = 0, stackYpos = 0;
-  // static int stackA[256];
-
-  int atk_count = 1;
-  int atk31F4 = 0, atk31F5 = 0, atk31F7 = 0, atk31F8 = 0, atk31F9 = 0,
-      atk31FA = 0, atk31FB = 0;
-
-  int ror = 0;
-  int continue_count = 0;
-
-  time_t timer;
-  struct tm *local_time;
-
-  // アタック目標値を設定
-  if (argc < 9) {
-    printf("yokai03 - brute force atk 20211219\n");
-    printf("usage:yokai03.exe $31F4 $31F5 $31F6 $31F7 $31F8 $31F9 $31FA $31FB "
-           "{continue param}\n");
-    printf("(例) yokai03.exe 00 08 03 22 88 20 .. パスワード<HAL>を検出\n");
-    printf("continue paramを指定すると続きから再開できます。\n");
-    printf("yokai03.exe \n");
-    return 0;
-  }
-  // 引数を各ターゲットに割り当て
-  atk31F4 = (int)strtoul(argv[1], NULL, 16);
-  atk31F5 = (int)strtoul(argv[2], NULL, 16);
-  atk_count = (int)strtol(argv[3], NULL, 16);
-  atk31F7 = (int)strtoul(argv[4], NULL, 16);
-  atk31F8 = (int)strtoul(argv[5], NULL, 16);
-  atk31F9 = (int)strtoul(argv[6], NULL, 16);
-  atk31FA = (int)strtoul(argv[7], NULL, 16);
-  atk31FB = (int)strtoul(argv[8], NULL, 16);
-
-  printf("解析パスワード文字数 : %d 文字\n", atk_count);
+  // 最後から2文字目に使う文字
+  unsigned char thread_char = itoa[thread_id];
 
   // スタック配列クリア
-  memset(a31DC, 0, sizeof(a31DC));
-  // memset(stackA, 0, sizeof(stackA));
+  memcpy(a31DC, start_a31DC, sizeof(a31DC));
 
-  timer = time(NULL);
-  local_time = localtime(&timer);
-  printf("%02d:%02d:%02d - ", local_time->tm_hour, local_time->tm_min,
-         local_time->tm_sec);
-  // printf("解析開始(ESCキーでコンテニュー値を表示して終了)\n");
-
-  // コンテニュー
-  if (argc > 9) {
-    continue_count = argc - 9;
-    printf("前回の続きからコンテニューします : ");
-    for (i = 0; i < continue_count; i++) {
-      a31DC[i] = (unsigned char)strtoul(argv[9 + i], NULL, 16);
-      printf("%02X ", a31DC[i]);
-    }
-    printf("\n");
-  } else {
-    printf("最初から回します\n");
-  }
-
-  // a31DCにターゲット桁数の数値を入れて回転させて、値が一致するまでアタック
-
-  // テストコード(あーすまん氏の$31FB合計値テーブル比較によるループスキップ)
-  // 文字全部のテーブル値を足した結果との差が1以下で無ければgoto
-  // LOOPさせて高速化
-  // a31FB, a31F9の計算はdifferentialに行う
   a31F9tmp = 0;
-  for (i = 0; i < atk_count - 1; i++) {
+  for (i = 0; i < atk_count - 2; i++) {
     a31F9tmp ^= a31DC[i];
   }
+  a31DC[atk_count - 2] = thread_char;
+  a31F9tmp ^= thread_char;
   a31DC[atk_count - 1] = atk31F9 ^ a31F9tmp;
 
   a31FBsum = 0;
@@ -364,7 +281,10 @@ int main(int argc, char *argv[]) {
 
   int cnt = 0;
 
-  while (1) {
+  printf("thread id:[%d] char code: [%02X] char: [%c]\n", thread_id,
+         thread_char, atoy[thread_char]);
+
+  while (!found) {
     int need_check = 1;
     cnt++;
 
@@ -383,7 +303,7 @@ int main(int argc, char *argv[]) {
       need_check = 0;
     }
 
-    if (cnt % 10000000 == 0) {
+    if (thread_id == 0 && cnt % 10000000 == 0) {
 
       printf("Current: ");
       for (i = 0; i < atk_count; i++) {
@@ -406,10 +326,10 @@ int main(int argc, char *argv[]) {
       if (bulk_idx == BULK_SIZE) {
         ret = bulk_calc_digit(bulk_a31DC, atk_count, bulk_a31FBsum, atk31F4,
                               atk31F5, atk31F7, atk31F8, atk31FA, atk31FB);
-
         if (ret) {
           // 見つかった
-          return 0;
+          found = true;
+          // return;
         }
         bulk_idx = 0;
       }
@@ -417,29 +337,33 @@ int main(int argc, char *argv[]) {
 
     do {
       // 最後の1文字はxorで決める。
-      int loop_start = atk_count - 2;
+      // 最後から2文字目はスレッドごとに決めた文字
+      int loop_start = atk_count - 3;
       a31FBsum -= std::popcount(a31DC[atk_count - 1]);
+      a31FBsum -= std::popcount(a31DC[atk_count - 2]);
+      a31F9tmp ^= a31DC[atk_count - 2];
 
       // a31FBsumが足りないときは大きく動かす
-      if (a31FBsum + atk_count + 4 < atk31FB) {
+      if (a31FBsum + atk_count + std::popcount(thread_char) + 4 < atk31FB) {
         int partial_sum = a31FBsum;
         for (i = loop_start; i >= 0; i--) {
           // 後の桁から4になる文字に置き換えて考えて、
           partial_sum += 4 - std::popcount(a31DC[i]);
           loop_start = i;
           // 超えたところで終了
-          if (partial_sum + atk_count + 4 >= atk31FB) {
+          if (partial_sum + atk_count + std::popcount(thread_char) + 4 >=
+              atk31FB) {
             break;
           }
         }
       }
 
       // 大きすぎるときも大きく動かす
-      if (a31FBsum > atk31FB) {
+      if (a31FBsum + std::popcount(thread_char) > atk31FB) {
         int partial_sum = a31FBsum;
         for (i = loop_start; i >= 0; i--) {
           partial_sum -= std::popcount(a31DC[i]);
-          if (partial_sum <= atk31FB) {
+          if (partial_sum + std::popcount(thread_char) <= atk31FB) {
             loop_start = i;
             break;
           }
@@ -447,7 +371,7 @@ int main(int argc, char *argv[]) {
       }
       // printf("loop_start: [%d]\n", loop_start);
 
-      for (i = loop_start + 1; i < atk_count - 1; i++) {
+      for (i = loop_start + 1; i < atk_count - 2; i++) {
         a31FBsum -= std::popcount(a31DC[i]);
         a31F9tmp ^= a31DC[i];
         a31DC[i] = 0x00;
@@ -480,30 +404,98 @@ int main(int argc, char *argv[]) {
                                 atk31F5, atk31F7, atk31F8, atk31FA, atk31FB);
           if (ret) {
             // 見つかった
-            return 0;
+            found = true;
+            return;
           }
-          printf("Not Found.\n");
-          return 0;
+          printf("Thread [%d]: Not Found.\n", thread_id);
+          return;
         }
       }
+      a31DC[atk_count - 2] = thread_char;
+      a31F9tmp ^= a31DC[atk_count - 2];
+      a31FBsum += std::popcount(a31DC[atk_count - 2]);
       a31DC[atk_count - 1] = atk31F9 ^ a31F9tmp;
       a31FBsum += std::popcount(a31DC[atk_count - 1]);
     } while (a31FBsum + atk_count < atk31FB || a31FBsum > atk31FB ||
              atoy[a31DC[atk_count - 1]] == '*');
+  }
+}
 
-    // // ESCキー判定。65535回に1度しかチェックしない
-    // if (a31DC[0] == 0 && a31DC[1] == 0 && a31DC[2] == 0 && a31DC[3] == 0 &&
-    //     a31DC[4] == 0 && a31DC[5] == 0) {
-    //   printf("continue command : yokai03.exe %s %s %s %s %s %s %s %s ",
-    //   argv[1],
-    //          argv[2], argv[3], argv[4], argv[5], argv[6], argv[7],
-    //          argv[8]);
-    //   for (i = 0; i < atk_count; i++) {
-    //     printf("%02X ", a31DC[i]);
-    //   }
-    //   printf("\n");
-    //   return 0;
-    // }
+// メイン
+int main(int argc, char *argv[]) {
+
+  printf("yokai-test03 brute force atk\n");
+
+  int i = 0, j = 0;
+  int ret;
+  // int stackApos = 0, stackXpos = 0, stackYpos = 0;
+  // static int stackA[256];
+
+  int atk_count = 1;
+  int atk31F4 = 0, atk31F5 = 0, atk31F7 = 0, atk31F8 = 0, atk31F9 = 0,
+      atk31FA = 0, atk31FB = 0;
+  unsigned char start_a31DC[16];
+  memset(start_a31DC, 0, sizeof(start_a31DC));
+
+  int continue_count = 0;
+
+  time_t timer;
+  struct tm *local_time;
+
+  // アタック目標値を設定
+  if (argc < 9) {
+    printf("yokai03 - brute force atk 20211219\n");
+    printf("usage:yokai03.exe $31F4 $31F5 $31F6 $31F7 $31F8 $31F9 $31FA $31FB "
+           "{continue param}\n");
+    printf("(例) yokai03.exe 00 08 03 22 88 20 .. パスワード<HAL>を検出\n");
+    printf("continue paramを指定すると続きから再開できます。\n");
+    printf("yokai03.exe \n");
+    return 0;
+  }
+  // 引数を各ターゲットに割り当て
+  atk31F4 = (int)strtoul(argv[1], NULL, 16);
+  atk31F5 = (int)strtoul(argv[2], NULL, 16);
+  atk_count = (int)strtol(argv[3], NULL, 16);
+  atk31F7 = (int)strtoul(argv[4], NULL, 16);
+  atk31F8 = (int)strtoul(argv[5], NULL, 16);
+  atk31F9 = (int)strtoul(argv[6], NULL, 16);
+  atk31FA = (int)strtoul(argv[7], NULL, 16);
+  atk31FB = (int)strtoul(argv[8], NULL, 16);
+
+  printf("解析パスワード文字数 : %d 文字\n", atk_count);
+
+  // memset(stackA, 0, sizeof(stackA));
+
+  timer = time(NULL);
+  local_time = localtime(&timer);
+  printf("%02d:%02d:%02d - ", local_time->tm_hour, local_time->tm_min,
+         local_time->tm_sec);
+  // printf("解析開始(ESCキーでコンテニュー値を表示して終了)\n");
+
+  // コンテニュー
+  if (argc > 9) {
+    continue_count = argc - 9;
+    printf("前回の続きからコンテニューします : ");
+    for (i = 0; i < continue_count; i++) {
+      start_a31DC[i] = (unsigned char)strtoul(argv[9 + i], NULL, 16);
+      printf("%02X ", start_a31DC[i]);
+    }
+    printf("\n");
+  } else {
+    printf("最初から回します\n");
+  }
+
+  std::vector<std::thread> threads;
+
+  for (i = 0; i < 42; i++) {
+    threads.push_back(std::thread([=]() {
+      calc_thread(i, start_a31DC, atk_count, atk31F4, atk31F5, atk31F7, atk31F8,
+                  atk31F9, atk31FA, atk31FB);
+    }));
+  }
+
+  for (i = 0; i < 42; i++) {
+    threads[i].join();
   }
 
   return 0;
