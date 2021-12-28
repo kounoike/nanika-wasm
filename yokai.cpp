@@ -157,15 +157,17 @@ int bulk_calc_digit(unsigned char bulk_a31DC[16][BULK_SIZE], int atk_count,
     for (int idx = 0; idx < BULK_SIZE; idx++)
       a31F7[idx] = bulk_a31DC[X][idx] + a31F7[idx] + C[idx];
     for (int idx = 0; idx < BULK_SIZE; idx++)
-      C[idx] = (a31F7[idx] < bulk_a31DC[X][idx] || (C[idx] > 0 && a31F7[idx] == bulk_a31DC[X][idx]))
+      C[idx] = (a31F7[idx] < bulk_a31DC[X][idx] ||
+                (C[idx] > 0 && a31F7[idx] == bulk_a31DC[X][idx]))
                    ? 1
                    : 0; // ADCのキャリー処理
     for (int idx = 0; idx < BULK_SIZE; idx++)
       a31F8[idx] = a31F8[idx] + a31F5[idx] + C[idx];
     for (int idx = 0; idx < BULK_SIZE; idx++)
-      C[idx] = (a31F8[idx] < a31F5[idx] || (C[idx] > 0 && a31F8[idx] == a31F5[idx]))
-                   ? 1
-                   : 0; // ADCのキャリー処理
+      C[idx] =
+          (a31F8[idx] < a31F5[idx] || (C[idx] > 0 && a31F8[idx] == a31F5[idx]))
+              ? 1
+              : 0; // ADCのキャリー処理
 
     // 31F9生成をスキップ、計算済みの値を使う(kounoike)
     // // D89B: // 31F9を生成(Complete)
@@ -186,9 +188,10 @@ int bulk_calc_digit(unsigned char bulk_a31DC[16][BULK_SIZE], int atk_count,
       a31FA[idx] = bulk_a31DC[X][idx] + a31FA[idx] + C1[idx];
     // 31FB生成をスキップ、計算済みの値にキャリー値のみ加算(kounoike)
     for (int idx = 0; idx < BULK_SIZE; idx++)
-      a31FB[idx] += (a31FA[idx] < bulk_a31DC[X][idx] || (C1[idx] > 0 && a31FA[idx] == bulk_a31DC[X][idx]))
-                   ? 1
-                   : 0; // ADCのキャリー処理
+      a31FB[idx] += (a31FA[idx] < bulk_a31DC[X][idx] ||
+                     (C1[idx] > 0 && a31FA[idx] == bulk_a31DC[X][idx]))
+                        ? 1
+                        : 0; // ADCのキャリー処理
 
     //   // D87F:
     //   stackA[stackApos++] = A;
@@ -390,7 +393,7 @@ int main(int argc, char *argv[]) {
     }
 
     if (need_check) {
-      for(i = 0; i < atk_count; i++) {
+      for (i = 0; i < atk_count; i++) {
         bulk_a31DC[i][bulk_idx] = a31DC[i];
       }
       bulk_a31FBsum[bulk_idx] = a31FBsum;
