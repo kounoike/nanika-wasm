@@ -2,6 +2,7 @@
 // 関数が含まれています。プログラム実行の開始と終了がそこで行われます。
 //
 
+#include <chrono>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -79,17 +80,13 @@ static unsigned char next_char[] = {
     /* c->Next */ 0x36,
 };
 
-// #define A31FBDIFF 1
-#define A31FBDIFF 2
-
 // check digit計算
 // 64個まとめて計算することでSIMD命令に置き換えてくれてることを期待している
 // 0: 見つからず 非0: 見つかった
 int bulk_calc_digit(unsigned char bulk_a31DC[16][BULK_SIZE], int atk_count,
-                    unsigned char *bulk_a31FBsum, unsigned char *bulk_a31F9tmp,
-                    unsigned char atk31F4, unsigned char atk31F5,
-                    unsigned char atk31F7, unsigned char atk31F8,
-                    unsigned char atk31F9, unsigned char atk31FA,
+                    unsigned char *bulk_a31FBsum, unsigned char atk31F4,
+                    unsigned char atk31F5, unsigned char atk31F7,
+                    unsigned char atk31F8, unsigned char atk31FA,
                     unsigned char atk31FB) {
   alignas(64) unsigned char a31F4[BULK_SIZE], a31F5[BULK_SIZE],
       a31F7[BULK_SIZE], a31F8[BULK_SIZE], a31F9[BULK_SIZE], a31FA[BULK_SIZE],
@@ -102,7 +99,6 @@ int bulk_calc_digit(unsigned char bulk_a31DC[16][BULK_SIZE], int atk_count,
   memset(a31F5, 0, sizeof(a31F5));
   memset(a31F7, 0, sizeof(a31F7));
   memset(a31F8, 0, sizeof(a31F8));
-  memcpy(a31F9, bulk_a31F9tmp, sizeof(a31F9));
   memset(a31FA, 0, sizeof(a31FA));
   memcpy(a31FB, bulk_a31FBsum, sizeof(a31FB));
   memset(A, 0, sizeof(A));
@@ -235,12 +231,11 @@ int bulk_calc_digit(unsigned char bulk_a31DC[16][BULK_SIZE], int atk_count,
   for (int idx = 0; idx < BULK_SIZE; idx++) {
     if (a31F4[idx] == atk31F4 && a31F5[idx] == atk31F5) {
       if (a31F7[idx] == atk31F7 && a31F8[idx] == atk31F8 &&
-          a31F9[idx] == atk31F9 && a31FA[idx] == atk31FA &&
-          a31FB[idx] == atk31FB) {
+          a31FA[idx] == atk31FA && a31FB[idx] == atk31FB) {
         char filename[300];
         char ext[] = ".hit.txt";
         for (i = 0; i < atk_count; i++) {
-          filename[i] = atoy[bulk_a31DC[idx][i]];
+          filename[i] = atoy[bulk_a31DC[i][idx]];
         }
         strncpy(&filename[atk_count], ext, strlen(ext) + 1);
         FILE *fp = fopen(filename, "w");
@@ -278,7 +273,7 @@ int main(int argc, char *argv[]) {
   unsigned char a31DC[256];
   unsigned char bulk_a31DC[16][BULK_SIZE];
   unsigned char a31FBsum = 0, a31F9tmp = 0;
-  unsigned char bulk_a31FBsum[BULK_SIZE], bulk_a31F9tmp[BULK_SIZE];
+  unsigned char bulk_a31FBsum[BULK_SIZE];
 
   int i = 0, j = 0;
   int ret;
@@ -346,14 +341,15 @@ int main(int argc, char *argv[]) {
   // 文字全部のテーブル値を足した結果との差が1以下で無ければgoto
   // LOOPさせて高速化
   // a31FB, a31F9の計算はdifferentialに行う
+  a31F9tmp = 0;
+  for (i = 0; i < atk_count - 1; i++) {
+    a31F9tmp ^= a31DC[i];
+  }
+  a31DC[atk_count - 1] = atk31F9 ^ a31F9tmp;
+
   a31FBsum = 0;
   for (i = 0; i < atk_count; i++) {
     a31FBsum += a31FBskip[a31DC[i]];
-  }
-
-  a31F9tmp = 0;
-  for (i = 0; i < atk_count; i++) {
-    a31F9tmp ^= a31DC[i];
   }
 
   int cnt = 0;
@@ -373,8 +369,7 @@ int main(int argc, char *argv[]) {
     //     break;
     //   }
     // }
-    if (a31FBsum > atk31FB || a31FBsum + A31FBDIFF < atk31FB ||
-        a31F9tmp != atk31F9) {
+    if (a31FBsum > atk31FB || a31FBsum + atk_count < atk31FB) {
       need_check = 0;
     }
 
@@ -397,12 +392,11 @@ int main(int argc, char *argv[]) {
         bulk_a31DC[i][bulk_idx] = a31DC[i];
       }
       bulk_a31FBsum[bulk_idx] = a31FBsum;
-      bulk_a31F9tmp[bulk_idx] = a31F9tmp;
       bulk_idx++;
       if (bulk_idx == BULK_SIZE) {
-        ret = bulk_calc_digit(bulk_a31DC, atk_count, bulk_a31FBsum,
-                              bulk_a31F9tmp, atk31F4, atk31F5, atk31F7, atk31F8,
-                              atk31F9, atk31FA, atk31FB);
+        ret = bulk_calc_digit(bulk_a31DC, atk_count, bulk_a31FBsum, atk31F4,
+                              atk31F5, atk31F7, atk31F8, atk31FA, atk31FB);
+
         if (ret) {
           // 見つかった
           return 0;
@@ -412,15 +406,18 @@ int main(int argc, char *argv[]) {
     }
 
     do {
+      // 最後の1文字はxorで決める。
+      a31FBsum -= a31FBskip[a31DC[atk_count - 1]];
+
       // a31FBsumが足りないときは大きく動かす
-      int loop_start = atk_count - 1;
-      if (a31FBsum + A31FBDIFF < atk31FB) {
+      int loop_start = atk_count - 2;
+      if (a31FBsum + atk_count < atk31FB) {
         int partial_sum = a31FBsum;
         for (i = loop_start; i >= 0; i--) {
           // 前の桁から4になる文字に置き換えて考えて、
           partial_sum += 4 - a31FBskip[a31DC[i]];
-          if (partial_sum + A31FBDIFF >= atk31FB) {
-            loop_start = i;
+          loop_start = i;
+          if (partial_sum + atk_count >= atk31FB) {
             break;
           }
         }
@@ -439,7 +436,7 @@ int main(int argc, char *argv[]) {
       }
       // printf("loop_start: [%d]\n", loop_start);
 
-      for (i = loop_start + 1; i < atk_count; i++) {
+      for (i = loop_start + 1; i < atk_count - 1; i++) {
         a31FBsum -= a31FBskip[a31DC[i]];
         a31F9tmp ^= a31DC[i];
         a31DC[i] = 0x00;
@@ -447,29 +444,14 @@ int main(int argc, char *argv[]) {
 
       // 0x00-0x35の範囲でループさせる
       for (i = loop_start; i >= 0; i--) {
-        if (i == atk_count - 1) {
-          // 最初の文字を変えるとき
-          // 31F9が一致していない→一致する値（0x35を超えてたら後ろで次の桁へ回す処理が働く）
-          // 31F9が一致している　→0x36を入れる（0x35を超えているので後ろで次の桁へ回す処理が働く）
-          if (a31F9tmp != atk31F9) {
-            a31FBsum -= a31FBskip[a31DC[i]];
-            a31F9tmp ^= a31DC[i];
-            a31DC[i] = a31F9tmp ^ atk31F9;
-          } else {
-            a31FBsum -= a31FBskip[a31DC[i]];
-            a31F9tmp ^= a31DC[i];
-            a31DC[i] = 0x36;
-          }
-        } else {
-          // 他の桁は1つずつ進める
-          a31FBsum -= a31FBskip[a31DC[i]];
-          a31F9tmp ^= a31DC[i];
-          // '*'にしない
-          // do {
-          //   a31DC[i]++;
-          // } while (atoy[a31DC[i]] == '*');
-          a31DC[i] = next_char[a31DC[i]];
-        }
+        // 他の桁は1つずつ進める
+        a31FBsum -= a31FBskip[a31DC[i]];
+        a31F9tmp ^= a31DC[i];
+        // '*'にしない
+        // do {
+        //   a31DC[i]++;
+        // } while (atoy[a31DC[i]] == '*');
+        a31DC[i] = next_char[a31DC[i]];
         // 0x35を超えたら次の桁へ
         if (a31DC[i] > 0x35) {
           a31DC[i] = 0;
@@ -480,12 +462,11 @@ int main(int argc, char *argv[]) {
           a31F9tmp ^= a31DC[i];
           break;
         }
-        // 最終桁が0x36になった瞬間に脱出
+        // 最初の文字が0x36になった瞬間に脱出
         if (a31DC[0] > 0x35) {
           // 抜ける前に残りを検索
-          ret = bulk_calc_digit(bulk_a31DC, atk_count, bulk_a31FBsum,
-                                bulk_a31F9tmp, atk31F4, atk31F5, atk31F7,
-                                atk31F8, atk31F9, atk31FA, atk31FB);
+          ret = bulk_calc_digit(bulk_a31DC, atk_count, bulk_a31FBsum, atk31F4,
+                                atk31F5, atk31F7, atk31F8, atk31FA, atk31FB);
           if (ret) {
             // 見つかった
             return 0;
@@ -494,8 +475,10 @@ int main(int argc, char *argv[]) {
           return 0;
         }
       }
-    } while (a31FBsum + A31FBDIFF < atk31FB || a31FBsum > atk31FB ||
-             a31F9tmp != atk31F9);
+      a31DC[atk_count - 1] = atk31F9 ^ a31F9tmp;
+      a31FBsum += a31FBskip[a31DC[atk_count - 1]];
+    } while (a31FBsum + atk_count < atk31FB || a31FBsum > atk31FB ||
+             a31DC[atk_count - 1] > 0x35 || atoy[a31DC[atk_count - 1]] == '*');
 
     // // ESCキー判定。65535回に1度しかチェックしない
     // if (a31DC[0] == 0 && a31DC[1] == 0 && a31DC[2] == 0 && a31DC[3] == 0 &&
