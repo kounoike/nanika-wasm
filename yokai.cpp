@@ -2,6 +2,7 @@
 // 関数が含まれています。プログラム実行の開始と終了がそこで行われます。
 //
 
+#include <bit>
 #include <chrono>
 #include <stdio.h>
 #include <stdlib.h>
@@ -16,11 +17,6 @@ static unsigned char atoy[] = {
     '*', '*', 'C', 'J', 'Q', 'X', '3', '8', '*', '*', 'D', 'K', 'R', 'Y',
     '4', '9', '*', '*', 'E', 'L', 'S', 'Z', '5', '0', '*', '*', 'F', 'M',
     'T', '-', 'n', '!', '*', '*', 'G', 'N', 'U', '.', 'm', 'c'};
-
-// $31FB高速スキップテーブル
-static int a31FBskip[] = {0, 1, 1, 2, 1, 2, 0, 0, 1, 2, 2, 3, 2, 3, 0, 0, 1, 2,
-                          2, 3, 2, 3, 0, 0, 2, 3, 3, 4, 3, 4, 0, 0, 1, 2, 2, 3,
-                          2, 3, 0, 0, 2, 3, 3, 4, 3, 4, 0, 0, 2, 3, 3, 4, 3, 4};
 
 // 次の妥当文字
 static unsigned char next_char[] = {
@@ -349,7 +345,7 @@ int main(int argc, char *argv[]) {
 
   a31FBsum = 0;
   for (i = 0; i < atk_count; i++) {
-    a31FBsum += a31FBskip[a31DC[i]];
+    a31FBsum += std::popcount(a31DC[i]);
   }
 
   int cnt = 0;
@@ -407,17 +403,17 @@ int main(int argc, char *argv[]) {
 
     do {
       // 最後の1文字はxorで決める。
-      a31FBsum -= a31FBskip[a31DC[atk_count - 1]];
+      a31FBsum -= std::popcount(a31DC[atk_count - 1]);
 
       // a31FBsumが足りないときは大きく動かす
       int loop_start = atk_count - 2;
-      if (a31FBsum + atk_count < atk31FB) {
+      if (a31FBsum + atk_count + 4 < atk31FB) {
         int partial_sum = a31FBsum;
         for (i = loop_start; i >= 0; i--) {
           // 前の桁から4になる文字に置き換えて考えて、
-          partial_sum += 4 - a31FBskip[a31DC[i]];
+          partial_sum += 4 - std::popcount(a31DC[i]);
           loop_start = i;
-          if (partial_sum + atk_count >= atk31FB) {
+          if (partial_sum + atk_count + 4 >= atk31FB) {
             break;
           }
         }
@@ -427,7 +423,7 @@ int main(int argc, char *argv[]) {
       if (a31FBsum > atk31FB) {
         int partial_sum = a31FBsum;
         for (i = loop_start; i >= 0; i--) {
-          partial_sum -= a31FBskip[a31DC[i]];
+          partial_sum -= std::popcount(a31DC[i]);
           if (partial_sum <= atk31FB + 1) {
             loop_start = i;
             break;
@@ -437,15 +433,15 @@ int main(int argc, char *argv[]) {
       // printf("loop_start: [%d]\n", loop_start);
 
       for (i = loop_start + 1; i < atk_count - 1; i++) {
-        a31FBsum -= a31FBskip[a31DC[i]];
+        a31FBsum -= std::popcount(a31DC[i]);
         a31F9tmp ^= a31DC[i];
         a31DC[i] = 0x00;
       }
 
       // 0x00-0x35の範囲でループさせる
       for (i = loop_start; i >= 0; i--) {
-        // 他の桁は1つずつ進める
-        a31FBsum -= a31FBskip[a31DC[i]];
+        // 1つずつ進める
+        a31FBsum -= std::popcount(a31DC[i]);
         a31F9tmp ^= a31DC[i];
         // '*'にしない
         // do {
@@ -455,10 +451,10 @@ int main(int argc, char *argv[]) {
         // 0x35を超えたら次の桁へ
         if (a31DC[i] > 0x35) {
           a31DC[i] = 0;
-          a31FBsum += a31FBskip[a31DC[i]];
-          a31F9tmp ^= a31DC[i];
+          // a31FBsum += a31FBskip[a31DC[i]];
+          // a31F9tmp ^= a31DC[i];
         } else {
-          a31FBsum += a31FBskip[a31DC[i]];
+          a31FBsum += std::popcount(a31DC[i]);
           a31F9tmp ^= a31DC[i];
           break;
         }
@@ -476,7 +472,7 @@ int main(int argc, char *argv[]) {
         }
       }
       a31DC[atk_count - 1] = atk31F9 ^ a31F9tmp;
-      a31FBsum += a31FBskip[a31DC[atk_count - 1]];
+      a31FBsum += std::popcount(a31DC[atk_count - 1]);
     } while (a31FBsum + atk_count < atk31FB || a31FBsum > atk31FB ||
              a31DC[atk_count - 1] > 0x35 || atoy[a31DC[atk_count - 1]] == '*');
 
