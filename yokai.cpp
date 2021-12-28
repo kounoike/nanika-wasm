@@ -474,7 +474,7 @@ int main(int argc, char *argv[]) {
           break;
         }
         // 最初の文字が0x36になった瞬間に脱出
-        if (a31DC[0] > 0x35) {
+        if (i == 0) {
           // 抜ける前に残りを検索
           ret = bulk_calc_digit(bulk_a31DC, atk_count, bulk_a31FBsum, atk31F4,
                                 atk31F5, atk31F7, atk31F8, atk31FA, atk31FB);
@@ -482,7 +482,7 @@ int main(int argc, char *argv[]) {
             // 見つかった
             return 0;
           }
-          printf("End.\n");
+          printf("Not Found.\n");
           return 0;
         }
       }
