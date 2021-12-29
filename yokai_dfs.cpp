@@ -253,13 +253,17 @@ int main(int argc, char *argv[]) {
     //        cur.depth, cur.PW[0], cur.PW[1], cur.PW[2],
     //        pw_to_string(cur.PW, cur.depth).c_str());
 
+    BulkCheckDigits &cd = checkDigits[cur.depth];
     int rem_chars = atk_count - cur.depth;
+    unsigned char fb = cd.FB[cur.PW[cur.depth - 1]];
+    if (fb > atk31FB || fb + 5 * (atk_count - cur.depth) < atk31FB) {
+      continue;
+    }
     if (rem_chars <= 4) {
       // $31F7はざっくり文字コードの総和＋キャリーの和
       // 文字コードは0x35が最大、キャリーは0か1なので、1文字あたり最大で0x35 + 1
       // = 54までしか増えない 最大まで増やしても目標値に到達しなければ枝狩り可能
       // 5文字あると54 * 5 = 270で一周してしまうので、4文字以内のとき使える
-      BulkCheckDigits &cd = checkDigits[cur.depth];
       unsigned int f7 = cd.F7[cur.PW[cur.depth - 1]];
       unsigned int target = atk31F7;
       if (target < f7) {
@@ -325,17 +329,13 @@ int main(int argc, char *argv[]) {
         break;
       }
     } else {
-      DfsNode nodes[42];
       for (int i = 0; i < 42; i++) {
         unsigned char c = itoa[i];
-        unsigned char fb = checkDigits[cur.depth + 1].FB[c];
-        if (fb > atk31FB || fb + 5 * (atk_count - cur.depth) < atk31FB) {
-          continue;
-        }
-        nodes[i].depth = cur.depth + 1;
-        memcpy(nodes[i].PW, cur.PW, cur.depth + 1);
-        nodes[i].PW[cur.depth] = c;
-        pool.push_back(std::move(nodes[i]));
+        DfsNode n;
+        n.depth = cur.depth + 1;
+        memcpy(n.PW, cur.PW, cur.depth + 1);
+        n.PW[cur.depth] = c;
+        pool.push_back(std::move(n));
       }
     }
   }
