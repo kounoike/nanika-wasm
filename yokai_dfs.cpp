@@ -258,6 +258,7 @@ int main(int argc, char *argv[]) {
       // $31F7はざっくり文字コードの総和＋キャリーの和
       // 文字コードは0x35が最大、キャリーは0か1なので、1文字あたり最大で0x35 + 1
       // = 54までしか増えない 最大まで増やしても目標値に到達しなければ枝狩り可能
+      // 5文字あると54 * 5 = 270で一周してしまうので、4文字以内のとき使える
       BulkCheckDigits &cd = checkDigits[cur.depth];
       unsigned int f7 = cd.F7[cur.PW[cur.depth - 1]];
       unsigned int target = atk31F7;
