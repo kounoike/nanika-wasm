@@ -252,6 +252,49 @@ int main(int argc, char *argv[]) {
     // count,
     //        cur.depth, cur.PW[0], cur.PW[1], cur.PW[2],
     //        pw_to_string(cur.PW, cur.depth).c_str());
+
+    int rem_chars = atk_count - cur.depth;
+    if (rem_chars <= 4) {
+      // $31F7はざっくり文字コードの総和＋キャリーの和
+      // 文字コードは0x35が最大、キャリーは0か1なので、1文字あたり最大で0x35 + 1
+      // = 54までしか増えない 最大まで増やしても目標値に到達しなければ枝狩り可能
+      BulkCheckDigits &cd = checkDigits[cur.depth];
+      unsigned int f7 = cd.F7[cur.PW[cur.depth - 1]];
+      unsigned int target = atk31F7;
+      if (target < f7) {
+        // 一周してくる必要がある
+        target += 256;
+      }
+      if (f7 + rem_chars * (0x35 + 1) < target) {
+        continue;
+      }
+    }
+
+    if (cur.depth == atk_count - 2) {
+      // $31F4と$31F5の下2ビットにパスワード後ろ2文字は影響を及ぼさない
+      // Y(14,1) = popcount(((Y(12) & 0b01000110) << 8) | (Z(12) & 0b01101110))
+      // % 2 Y(14,0) = popcount(((Y(12) & 0b00100011) << 8) | (Z(12) &
+      // 0b00110111)) % 2
+
+      // Z(14,1) = popcount(((Y(12) & 0b00100010) << 8) | (Z(12) & 0b01100000))
+      // % 2 Z(14,0) = popcount(((Y(12) & 0b00010001) << 8) | (Z(12) &
+      // 0b00110000)) % 2
+
+      BulkCheckDigits &cd = checkDigits[cur.depth];
+      unsigned int f4 = cd.F4[cur.PW[cur.depth - 1]];
+      unsigned int f5 = cd.F5[cur.PW[cur.depth - 1]];
+      unsigned int f4_1_bits = ((f4 & 0b01000110) << 8) | (f5 & 0b01101110);
+      unsigned int f4_0_bits = ((f4 & 0b00100011) << 8) | (f5 & 0b00110111);
+      unsigned int f5_1_bits = ((f4 & 0b00100010) << 8) | (f5 & 0b01100000);
+      unsigned int f5_0_bits = ((f4 & 0b00010001) << 8) | (f5 & 0b00110000);
+      if (((std::popcount(f4_1_bits) % 2) != ((atk31F4 >> 1) & 0x01)) ||
+          ((std::popcount(f4_0_bits) % 2) != (atk31F4 & 0x01)) ||
+          ((std::popcount(f5_1_bits) % 2) != ((atk31F5 >> 1) & 0x01)) ||
+          ((std::popcount(f5_0_bits) % 2) != (atk31F5 & 0x01))) {
+        continue;
+      }
+    }
+
     if (cur.depth == 0) {
       calc_next(checkDigits[0], checkDigits[1], 0x00);
     } else {
