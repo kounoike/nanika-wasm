@@ -259,7 +259,7 @@ int main(int argc, char *argv[]) {
     if (fb > atk31FB || fb + 5 * (atk_count - cur.depth) < atk31FB) {
       continue;
     }
-    if (rem_chars <= 4) {
+    if (rem_chars > 0 && rem_chars <= 4) {
       // $31F7はざっくり文字コードの総和＋キャリーの和
       // 文字コードは0x35が最大、キャリーは0か1なので、1文字あたり最大で0x35 + 1
       // = 54までしか増えない 最大まで増やしても目標値に到達しなければ枝狩り可能
@@ -270,8 +270,24 @@ int main(int argc, char *argv[]) {
         // 一周してくる必要がある
         target += 256;
       }
-      if (f7 + rem_chars * (0x35 + 1) < target) {
-        continue;
+      // $31F9: パスワード全体のxor
+      unsigned char f9 = cd.F9[cur.PW[cur.depth - 1]];
+      // f9 ^ atk31F9
+      // の各ビットで、「残りの文字でそのビットを何回使うか」の偶奇が分かる
+      if (((f9 ^ atk31F9) & 0x20) >> 5 != rem_chars % 2) {
+        // 0x20のビットを全部では使えない。1回は最大値が0x1Dになる
+        if (f7 + (rem_chars - 1) * (0x35 + 1) + 0x1D + 1 < target) {
+          continue;
+        }
+      } else if (((f9 ^ atk31F9) & 0x10) >> 4 != rem_chars % 2) {
+        // 0x10のビットを全部では使えない。1回は最大値が0x2Dになる
+        if (f7 + (rem_chars - 1) * (0x35 + 1) + 0x2D + 1 < target) {
+          continue;
+        }
+      } else {
+        if (f7 + rem_chars * (0x35 + 1) < target) {
+          continue;
+        }
       }
     }
 
