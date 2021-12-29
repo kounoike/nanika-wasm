@@ -272,6 +272,7 @@ int main(int argc, char *argv[]) {
 
     if (cur.depth == atk_count - 2) {
       // $31F4と$31F5の下2ビットにパスワード後ろ2文字は影響を及ぼさない
+      // 解説: https://gist.github.com/kounoike/340c1dbf684bc2cc5dd0169b1f824317
       // Y(14,1) = popcount(((Y(12) & 0b01000110) << 8) | (Z(12) & 0b01101110))
       // % 2 Y(14,0) = popcount(((Y(12) & 0b00100011) << 8) | (Z(12) &
       // 0b00110111)) % 2
