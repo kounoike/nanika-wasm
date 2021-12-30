@@ -235,7 +235,7 @@ int main(int argc, char *argv[]) {
   // コンテニュー
   if (argc > 9) {
     continue_count = argc - 9;
-    printf("前回の続きからコンテニューします : ");
+    printf("プレフィクス指定で動作します prefix: ");
     for (i = 0; i < continue_count; i++) {
       start_a31DC[i] = (unsigned char)strtoul(argv[9 + i], NULL, 16);
       printf("%02X ", start_a31DC[i]);
@@ -262,6 +262,16 @@ int main(int argc, char *argv[]) {
   initNode.depth = 0;
   for (int idx = 0; idx < PWLEN_MAX; idx++)
     initNode.PW[idx] = 0x00;
+
+  if (continue_count > 0) {
+    calc_next(checkDigits[0], checkDigits[1], 0x00);
+    for (i = 1; i <= continue_count; i++) {
+      calc_next(checkDigits[i], checkDigits[i + 1], start_a31DC[i - 1]);
+      initNode.PW[i - 1] = start_a31DC[i - 1];
+    }
+    initNode.depth = continue_count;
+  }
+
   pool.push_back(std::move(initNode));
 
   int count = 0;
@@ -294,22 +304,25 @@ int main(int argc, char *argv[]) {
         // 一周してくる必要がある
         target += 256;
       }
+      // last_carry:
+      // 最後の桁の$31F4は既知なのでキャリーが発生する(>=0xE5)かどうか事前に分かる
+      int last_carry = atk31F4 >= 0xE5 ? 1 : 0;
       // $31F9: パスワード全体のxor
       unsigned char f9 = cd.F9[cur.PW[cur.depth - 1]];
       // f9 ^ atk31F9
       // の各ビットで、「残りの文字でそのビットを何回使うか」の偶奇が分かる
       if (((f9 ^ atk31F9) & 0x20) >> 5 != rem_chars % 2) {
         // 0x20のビットを全部では使えない。1回は最大値が0x1Dになる
-        if (f7 + (rem_chars - 1) * (0x35 + 1) + 0x1D + 1 < target) {
+        if (f7 + (rem_chars - 1) * (0x35 + 1) + 0x1D + last_carry < target) {
           continue;
         }
       } else if (((f9 ^ atk31F9) & 0x10) >> 4 != rem_chars % 2) {
         // 0x10のビットを全部では使えない。1回は最大値が0x2Dになる
-        if (f7 + (rem_chars - 1) * (0x35 + 1) + 0x2D + 1 < target) {
+        if (f7 + (rem_chars - 1) * (0x35 + 1) + 0x2D + last_carry < target) {
           continue;
         }
       } else {
-        if (f7 + rem_chars * (0x35 + 1) < target) {
+        if (f7 + rem_chars * (0x35 + 1) - 1 + last_carry < target) {
           continue;
         }
       }
@@ -333,10 +346,10 @@ int main(int argc, char *argv[]) {
       unsigned int f4_0_bits = ((f4 & 0b00100011) << 8) | (f5 & 0b00110111);
       unsigned int f5_1_bits = ((f4 & 0b00100010) << 8) | (f5 & 0b01100000);
       unsigned int f5_0_bits = ((f4 & 0b00010001) << 8) | (f5 & 0b00110000);
-      if (((std::popcount(f4_1_bits) % 2) != ((atk31F4 >> 1) & 0x01)) ||
-          ((std::popcount(f4_0_bits) % 2) != (atk31F4 & 0x01)) ||
-          ((std::popcount(f5_1_bits) % 2) != ((atk31F5 >> 1) & 0x01)) ||
-          ((std::popcount(f5_0_bits) % 2) != (atk31F5 & 0x01))) {
+      if (((std::popcount(f4_1_bits) & 0x01) != ((atk31F4 >> 1) & 0x01)) ||
+          ((std::popcount(f4_0_bits) & 0x01) != (atk31F4 & 0x01)) ||
+          ((std::popcount(f5_1_bits) & 0x01) != ((atk31F5 >> 1) & 0x01)) ||
+          ((std::popcount(f5_0_bits) & 0x01) != (atk31F5 & 0x01))) {
         continue;
       }
     }
