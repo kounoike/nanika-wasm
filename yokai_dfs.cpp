@@ -289,6 +289,7 @@ int main(int argc, char *argv[]) {
 
     // $31FBは文字コードのビットが1になってるものの総和＋キャリーの和
     // 文字コード集合の関係で1文字で4、キャリー足して5が最大
+    // 256を超えることはないので減ることはない
     unsigned char fb = cd.FB[cur.PW[cur.depth - 1]];
     if (fb > atk31FB || fb + 5 * rem_chars < atk31FB) {
       continue;
