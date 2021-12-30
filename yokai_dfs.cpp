@@ -365,22 +365,24 @@ int main(int argc, char *argv[]) {
       // 最終文字はxorで決まる
       unsigned char c =
           atk31F9 ^ checkDigits[atk_count - 1].F9[cur.PW[atk_count - 2]];
-      cur.PW[atk_count - 1] = c;
-      BulkCheckDigits &cd = checkDigits[atk_count];
-      if (cd.F4[c] == atk31F4 && cd.F5[c] == atk31F5 && cd.F7[c] == atk31F7 &&
-          cd.F8[c] == atk31F8 && cd.F9[c] == atk31F9 && cd.FA[c] == atk31FA &&
-          cd.FB[c] == atk31FB) {
-        printf("Hit: ");
-        for (int idx = 0; idx < atk_count; idx++) {
-          printf("%02X ", cur.PW[idx]);
+      if (c <= 0x35 && atoy[c] != '*') {
+        cur.PW[atk_count - 1] = c;
+        BulkCheckDigits &cd = checkDigits[atk_count];
+        if (cd.F4[c] == atk31F4 && cd.F5[c] == atk31F5 && cd.F7[c] == atk31F7 &&
+            cd.F8[c] == atk31F8 && cd.F9[c] == atk31F9 && cd.FA[c] == atk31FA &&
+            cd.FB[c] == atk31FB) {
+          printf("Hit: ");
+          for (int idx = 0; idx < atk_count; idx++) {
+            printf("%02X ", cur.PW[idx]);
+          }
+          printf(": ");
+          for (int idx = 0; idx < atk_count; idx++) {
+            printf("%c", atoy[cur.PW[idx]]);
+          }
+          printf("\n");
+          // 発見したら抜ける
+          // break;
         }
-        printf(": ");
-        for (int idx = 0; idx < atk_count; idx++) {
-          printf("%c", atoy[cur.PW[idx]]);
-        }
-        printf("\n");
-        // 発見したら抜ける
-        break;
       }
     } else {
       for (int i = 0; i < 42; i++) {
