@@ -256,7 +256,7 @@ int main(int argc, char *argv[]) {
     BulkCheckDigits &cd = checkDigits[cur.depth];
     int rem_chars = atk_count - cur.depth;
     unsigned char fb = cd.FB[cur.PW[cur.depth - 1]];
-    if (fb > atk31FB || fb + 5 * (atk_count - cur.depth) < atk31FB) {
+    if (fb > atk31FB || fb + 5 * rem_chars < atk31FB) {
       continue;
     }
     if (rem_chars > 0 && rem_chars <= 4) {
