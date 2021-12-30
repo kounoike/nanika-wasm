@@ -163,8 +163,8 @@ void calc_next(const BulkCheckDigits &prevCD, BulkCheckDigits &nextCD,
     nextCD.FB[idx] = prevCD.FB[prevChar] + A[idx] + C[idx];
 
   // popcount計算3: 事前計算済みの値
-  for (int idx = 0; idx < BULK_SIZE; idx++)
-    nextCD.FB[idx] = prevCD.FB[prevChar] + PopCount[idx] + C[idx];
+  // for (int idx = 0; idx < BULK_SIZE; idx++)
+  //   nextCD.FB[idx] = prevCD.FB[prevChar] + PopCount[idx] + C[idx];
 }
 
 std::string pw_to_string(unsigned char *p, int len) {
