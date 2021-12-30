@@ -11,6 +11,8 @@
 #include <time.h>
 #include <vector>
 
+#include <immintrin.h>
+
 #define BULK_SIZE 64
 #define PWLEN_MAX 16
 
@@ -56,10 +58,20 @@ struct DfsNode {
   unsigned char PW[PWLEN_MAX];
 };
 
+alignas(64) const static unsigned char PopCount[BULK_SIZE] = {
+    0, 1, 1, 2, 1, 2, 2, 3, 1, 2, 2, 3, 2, 3, 3, 4, 1, 2, 2, 3, 2, 3,
+    3, 4, 2, 3, 3, 4, 3, 4, 4, 5, 1, 2, 2, 3, 2, 3, 3, 4, 2, 3, 3, 4,
+    3, 4, 4, 5, 2, 3, 3, 4, 5, 4, 4, 5, 3, 4, 4, 5, 4, 5, 5, 6,
+};
+
 void calc_next(const BulkCheckDigits &prevCD, BulkCheckDigits &nextCD,
                unsigned char prevChar) {
-  unsigned char PW[BULK_SIZE], A[BULK_SIZE], A1[BULK_SIZE], C[BULK_SIZE],
-      C1[BULK_SIZE];
+  alignas(64) unsigned char PW[BULK_SIZE];
+  alignas(64) unsigned char A[BULK_SIZE];
+  alignas(64) unsigned char A1[BULK_SIZE];
+  alignas(64) unsigned char C[BULK_SIZE];
+  alignas(64) unsigned char C1[BULK_SIZE];
+
   int Y;
   for (int idx = 0; idx < BULK_SIZE; idx++)
     PW[idx] = idx;
@@ -130,8 +142,13 @@ void calc_next(const BulkCheckDigits &prevCD, BulkCheckDigits &nextCD,
             ? 1
             : 0; // ADCのキャリー処理
   // $31FB
+  // popcount計算1: std::popcountを使う
   // for (int idx = 0; idx < BULK_SIZE; idx++)
   //   A[idx] = std::popcount(PW[idx]);
+  // for (int idx = 0; idx < BULK_SIZE; idx++)
+  //   nextCD.FB[idx] = prevCD.FB[prevChar] + A[idx] + C[idx];
+
+  // popcount計算2: 6bit(文字コードの関係)分回す
   for (int idx = 0; idx < BULK_SIZE; idx++)
     A[idx] = 0;
   for (int idx = 0; idx < BULK_SIZE; idx++)
@@ -144,6 +161,10 @@ void calc_next(const BulkCheckDigits &prevCD, BulkCheckDigits &nextCD,
   }
   for (int idx = 0; idx < BULK_SIZE; idx++)
     nextCD.FB[idx] = prevCD.FB[prevChar] + A[idx] + C[idx];
+
+  // popcount計算3: 事前計算済みの値
+  for (int idx = 0; idx < BULK_SIZE; idx++)
+    nextCD.FB[idx] = prevCD.FB[prevChar] + PopCount[idx] + C[idx];
 }
 
 std::string pw_to_string(unsigned char *p, int len) {
@@ -255,6 +276,9 @@ int main(int argc, char *argv[]) {
 
     BulkCheckDigits &cd = checkDigits[cur.depth];
     int rem_chars = atk_count - cur.depth;
+
+    // $31FBは文字コードのビットが1になってるものの総和＋キャリーの和
+    // 文字コード集合の関係で1文字で4、キャリー足して5が最大
     unsigned char fb = cd.FB[cur.PW[cur.depth - 1]];
     if (fb > atk31FB || fb + 5 * rem_chars < atk31FB) {
       continue;
