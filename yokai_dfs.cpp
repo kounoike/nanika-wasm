@@ -274,7 +274,7 @@ int main(int argc, char *argv[]) {
 
   pool.push_back(std::move(initNode));
 
-  int count = 0;
+  unsigned long long count = 0;
   while (!pool.empty()) {
     count++;
     DfsNode cur = pool.back();
@@ -393,7 +393,7 @@ int main(int argc, char *argv[]) {
       }
     }
   }
-  printf("End\n");
+  printf("End Count:%llu\n", count);
 
   return 0;
 }
