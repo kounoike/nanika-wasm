@@ -229,17 +229,19 @@ void calc_thread(ThreadData &thread_data, std::mutex &mtx, int atk_count,
     BulkCheckDigits &cd = thread_data.threadCheckDigits[cur.depth];
     int rem_chars = atk_count - cur.depth;
 
-    if (count == 10) {
-      std::lock_guard<std::mutex> lock(mtx);
-      printf("count: %llu, cur.depth: %d cur.PW: %02X %02X %02X.. : %s f4:%02X "
-             "f5:%02X f7:%02X f8:%02X f9:%02X fa:%02X fb:%02X\n",
-             count, cur.depth, cur.PW[0], cur.PW[1], cur.PW[2],
-             pw_to_string(cur.PW, cur.depth).c_str(),
-             cd.F4[cur.PW[cur.depth - 1]], cd.F5[cur.PW[cur.depth - 1]],
-             cd.F7[cur.PW[cur.depth - 1]], cd.F8[cur.PW[cur.depth - 1]],
-             cd.F9[cur.PW[cur.depth - 1]], cd.FA[cur.PW[cur.depth - 1]],
-             cd.FB[cur.PW[cur.depth - 1]]);
-    }
+    // Debug
+    // if (count == 10) {
+    //   std::lock_guard<std::mutex> lock(mtx);
+    //   printf("count: %llu, cur.depth: %d cur.PW: %02X %02X %02X.. : %s
+    //   f4:%02X "
+    //          "f5:%02X f7:%02X f8:%02X f9:%02X fa:%02X fb:%02X\n",
+    //          count, cur.depth, cur.PW[0], cur.PW[1], cur.PW[2],
+    //          pw_to_string(cur.PW, cur.depth).c_str(),
+    //          cd.F4[cur.PW[cur.depth - 1]], cd.F5[cur.PW[cur.depth - 1]],
+    //          cd.F7[cur.PW[cur.depth - 1]], cd.F8[cur.PW[cur.depth - 1]],
+    //          cd.F9[cur.PW[cur.depth - 1]], cd.FA[cur.PW[cur.depth - 1]],
+    //          cd.FB[cur.PW[cur.depth - 1]]);
+    // }
 
     // $31FBは文字コードのビットが1になってるものの総和＋キャリーの和
     // 文字コード集合の関係で1文字で4、キャリー足して5が最大
