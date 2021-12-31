@@ -1,4 +1,6 @@
 yokai
 yokai_check
 yokai_dfs
+yokai_dfs_threads
 *.hit.txt
+password/
