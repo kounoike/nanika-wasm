@@ -205,6 +205,15 @@ int main(int argc, char *argv[]) {
   snprintf(basepart, 256, "dat_%02X%02X%02X%02X%02X%02X%02X%02X", atk31F4,
            atk31F5, atk_count, atk31F7, atk31F8, atk31F9, atk31FA, atk31FB);
 
+  char minmax_filename[256];
+  snprintf(minmax_filename, 256, "%s/minmax.dat", basepart);
+  FILE *minmax_fp = fopen(minmax_filename, "rb");
+  unsigned char minmax_buffer[2];
+  fread(minmax_buffer, 2, 1, minmax_fp);
+  fclose(minmax_fp);
+  int fbmin = minmax_buffer[0];
+  int fbmax = minmax_buffer[1];
+
   pool.push_back(start_node);
 
   // 探索
@@ -218,7 +227,8 @@ int main(int argc, char *argv[]) {
     // $31FBベース枝狩り
     int rem_chars = atk_count - node.depth;
     const unsigned char &fb = node.digits.fb;
-    if (fb > atk31FB || fb + 5 * rem_chars < atk31FB) {
+    if (fb + fbmin > atk31FB ||
+        fb + 5 * (rem_chars - backward_len) + fbmax < atk31FB) {
       continue;
     }
 

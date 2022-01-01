@@ -563,6 +563,9 @@ int main(int argc, char *argv[]) {
   unsigned long long found_count = 0;
   int backward_len = atk_count / 2;
 
+  int fbmax = 0;
+  int fbmin = 10 * atk_count; // 適当に大きく。INT_MAX出してくるほどでもない
+
   while (!pool.empty()) {
     count++;
     Node node = pool.back();
@@ -587,6 +590,14 @@ int main(int argc, char *argv[]) {
       FILE *fp = fopen(filename, "ab");
       fwrite(buffer, len, 1, fp);
       fclose(fp);
+
+      unsigned char fb = node.info.partial_fb & 0xff;
+      if (fbmax < fb) {
+        fbmax = fb;
+      }
+      if (fbmin > fb) {
+        fbmin = fb;
+      }
       continue;
     }
 
@@ -641,6 +652,19 @@ int main(int argc, char *argv[]) {
       // std::vector<Node> new_nodes = backward_step_simd(node);
       pool.insert(pool.end(), new_nodes.begin(), new_nodes.end());
     }
+  }
+
+  char minmax_filename[256];
+  snprintf(minmax_filename, 256, "%s/minmax.dat", basename);
+  FILE *fp = fopen(minmax_filename, "wb");
+  if (!fp) {
+    printf("minmax.dat open error!.");
+  } else {
+    unsigned char minmax[2];
+    minmax[0] = fbmin;
+    minmax[1] = fbmax;
+    fwrite(minmax, 2, 1, fp);
+    fclose(fp);
   }
   printf("End, count: %llu found_count: %llu\n", count, found_count);
 }
