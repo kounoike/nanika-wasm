@@ -571,6 +571,12 @@ int main(int argc, char *argv[]) {
     Node node = pool.back();
     pool.pop_back();
 
+    // $31FBが頑張っても足りないときは枝狩り
+    // オーバーしちゃってる場合のは別の場所
+    if (node.digits.fb > 5 * (atk_count - node.depth)) {
+      continue;
+    }
+
     // 目標深さに到達
     if (node.depth >= backward_len) {
       found_count++;
