@@ -1,13 +1,15 @@
+#include <algorithm>
 #include <bit>
 #include <cassert>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
 #include <iostream>
+#include <map>
 #include <string>
 #include <vector>
 
-// const int PWLEN_MAX = 16;
+const int PWLEN_MAX = 16;
 const int NUM_CHARSET = 42;
 
 // 文字コード変換テーブル
@@ -75,6 +77,22 @@ struct Node {
   AdditionalInfo info;
   int depth;
   std::string pw;
+};
+
+struct BackwardInfo {
+  unsigned char f8;
+  unsigned char fa;
+  unsigned char partial_f7;
+  unsigned char partial_f9;
+  unsigned char partial_fb;
+  char pw[PWLEN_MAX / 2];
+};
+
+bool bwi_comp(const BackwardInfo &a, const BackwardInfo &b) {
+  if (a.f8 == b.f8)
+    return a.fa < b.fa;
+  else
+    return a.f8 < b.f8;
 };
 
 // パスワードと次ステップの$31F4を入れると前のステップの$31F5が出るテーブル
@@ -376,6 +394,9 @@ int main(int argc, char *argv[]) {
   int fbmax = 0;
   int fbmin = 10 * atk_count; // 適当に大きく。INT_MAX出してくるほどでもない
 
+  std::map<std::pair<unsigned char, unsigned char>, std::vector<BackwardInfo>>
+      bwi_map;
+
   while (!pool.empty()) {
     count++;
     Node node = pool.back();
@@ -390,22 +411,27 @@ int main(int argc, char *argv[]) {
     // 目標深さに到達
     if (node.depth >= backward_len) {
       found_count++;
-      int len = 2 + 3 + node.pw.length();
-      unsigned char buffer[len];
-      buffer[0] = node.digits.f8;
-      buffer[1] = node.digits.fa;
-      buffer[2] = node.info.partial_f7 & 0xff;
-      buffer[3] = node.info.partial_f9;
-      buffer[4] = node.info.partial_fb & 0xff;
-      memcpy(&buffer[5], node.pw.c_str(), backward_len);
 
-      char filename[256];
-      snprintf(filename, 256, "%s/%02X%02X", basename, node.digits.f4,
-               node.digits.f5);
+      std::pair<unsigned char, unsigned char> key{node.digits.f4,
+                                                  node.digits.f5};
 
-      FILE *fp = fopen(filename, "ab");
-      fwrite(buffer, len, 1, fp);
-      fclose(fp);
+      BackwardInfo bwi;
+      bwi.f8 = node.digits.f8;
+      bwi.fa = node.digits.fa;
+      bwi.partial_f7 = node.info.partial_f7;
+      bwi.partial_f9 = node.info.partial_f9;
+      bwi.partial_fb = node.info.partial_fb;
+      memcpy(bwi.pw, node.pw.c_str(), backward_len);
+
+      if (bwi_map.contains(key)) {
+        std::vector<BackwardInfo> &vec = bwi_map[key];
+        vec.insert(std::upper_bound(vec.begin(), vec.end(), bwi, bwi_comp),
+                   std::move(bwi));
+      } else {
+        std::vector<BackwardInfo> value;
+        value.push_back(std::move(bwi));
+        bwi_map.insert(std::make_pair(key, value));
+      }
 
       unsigned char fb = node.info.partial_fb & 0xff;
       if (fbmax < fb) {
@@ -483,4 +509,14 @@ int main(int argc, char *argv[]) {
     fclose(fp);
   }
   printf("End, count: %llu found_count: %llu\n", count, found_count);
+  printf("Writing results..\n");
+  for (auto it = bwi_map.begin(); it != bwi_map.end(); it++) {
+    char filename[256];
+    snprintf(filename, 256, "%s/%02X%02X", basename, it->first.first,
+             it->first.second);
+
+    FILE *fp = fopen(filename, "wb");
+    fwrite(&it->second[0], sizeof(BackwardInfo), it->second.size(), fp);
+    fclose(fp);
+  }
 }

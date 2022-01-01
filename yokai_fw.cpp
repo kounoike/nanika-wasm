@@ -1,6 +1,9 @@
+#include <algorithm>
 #include <bit>
+#include <cassert>
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
 #include <iostream>
 #include <map>
 #include <memory>
@@ -79,15 +82,20 @@ struct Node {
 };
 
 struct BackwardInfo {
+  unsigned char f8;
+  unsigned char fa;
+  unsigned char partial_f7;
+  unsigned char partial_f9;
+  unsigned char partial_fb;
   char pw[PWLEN_MAX / 2];
-  AdditionalInfo info;
 };
 
-size_t get_index(unsigned int f4, unsigned int f5, unsigned int f8,
-                 unsigned int fa) {
-  size_t ret = (f4 << 24) | (f5 << 16) | (f8 << 8) | fa;
-  return ret;
-}
+bool bwi_comp(const BackwardInfo &a, const BackwardInfo &b) {
+  if (a.f8 == b.f8)
+    return a.fa < b.fa;
+  else
+    return a.f8 < b.f8;
+};
 
 Node forward_step(const Node &node, unsigned char p) {
   // 基本情報
@@ -346,34 +354,35 @@ int main(int argc, char *argv[]) {
       char filename[256];
       snprintf(filename, 256, "%s/%02X%02X", basepart, node.digits.f4,
                node.digits.f5);
+
+      auto num = std::filesystem::file_size(filename) / sizeof(BackwardInfo);
+
       FILE *fp;
       fp = fopen(filename, "rb");
       if (!fp) {
         continue;
       }
-      int count = 0;
-      size_t len = 2 + 3 + backward_len;
-      unsigned char buffer[len + 1];
-      while (fread(buffer, len, 1, fp) == 1) {
-        count++;
-        buffer[len] = '\0';
-        AdditionalInfo info;
-        unsigned char f8 = buffer[0];
-        unsigned char fa = buffer[1];
-        info.partial_f7 = buffer[2];
-        info.partial_f9 = buffer[3];
-        info.partial_fb = buffer[4];
-        std::string pw = std::string((char *)&buffer[5]);
-        if ((f8 == node.digits.f8) && (fa == node.digits.fa) &&
-            (((node.digits.f7 + info.partial_f7) & 0xff) == atk31F7) &&
-            ((node.digits.f9 ^ info.partial_f9) == atk31F9) &&
-            (node.digits.fb + info.partial_fb == atk31FB)) {
+
+      std::vector<BackwardInfo> vec(num);
+      auto read_num = fread(&vec[0], sizeof(BackwardInfo), num, fp);
+      assert(read_num == num);
+      fclose(fp);
+
+      BackwardInfo bwi_for_comp;
+      bwi_for_comp.f8 = node.digits.f8;
+      bwi_for_comp.fa = node.digits.fa;
+
+      auto p = std::equal_range(vec.begin(), vec.end(), bwi_for_comp, bwi_comp);
+      for (auto it = p.first; it != p.second; it++) {
+        if ((it->f8 == node.digits.f8) && (it->fa == node.digits.fa) &&
+            (((node.digits.f7 + it->partial_f7) & 0xff) == atk31F7) &&
+            ((node.digits.f9 ^ it->partial_f9) == atk31F9) &&
+            (node.digits.fb + it->partial_fb == atk31FB)) {
           // 見つかった
-          printf("Hit: %s in filename:[%s] count:%d\n", (node.pw + pw).c_str(),
-                 filename, count);
+          printf("Hit: %s in filename:[%s] count:%lu\n",
+                 (node.pw + it->pw).c_str(), filename, vec.size());
         }
       }
-      fclose(fp);
       // これ以上深く探索しない
       continue;
     }
