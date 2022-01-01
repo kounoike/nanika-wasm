@@ -64,7 +64,7 @@ struct Digits {
 };
 
 struct AdditionalInfo {
-  unsigned short partial_f7;
+  unsigned char partial_f7;
   unsigned char partial_fb;
   unsigned char partial_f9;
 };
@@ -352,7 +352,8 @@ std::vector<Node> backward_step(const Node &node, unsigned char p) {
 
     // 付加情報の生成
     AdditionalInfo &ret_info = new_node.info;
-    ret_info.partial_f7 = info.partial_f7 + p + (next.f4 >= 0xE5 ? 1 : 0);
+    ret_info.partial_f7 =
+        (info.partial_f7 + p + (next.f4 >= 0xE5 ? 1 : 0)) & 0xff;
     ret_info.partial_f9 = info.partial_f9 ^ p;
     ret_info.partial_fb = info.partial_fb + std::popcount(p) + c_fa;
 
@@ -564,17 +565,16 @@ int main(int argc, char *argv[]) {
     // 目標深さに到達
     if (node.depth >= backward_len) {
       found_count++;
-      int len = 4 + 4 + node.pw.length();
+      int len = 4 + 3 + node.pw.length();
       unsigned char buffer[len];
       buffer[0] = node.digits.f4;
       buffer[1] = node.digits.f5;
       buffer[2] = node.digits.f8;
       buffer[3] = node.digits.fa;
-      buffer[4] = (node.info.partial_f7 & 0xff00) >> 8;
-      buffer[5] = node.info.partial_f7 & 0xff;
-      buffer[6] = node.info.partial_f9;
-      buffer[7] = node.info.partial_fb & 0xff;
-      memcpy(&buffer[8], node.pw.c_str(), backward_len);
+      buffer[4] = node.info.partial_f7 & 0xff;
+      buffer[5] = node.info.partial_f9;
+      buffer[6] = node.info.partial_fb & 0xff;
+      memcpy(&buffer[7], node.pw.c_str(), backward_len);
       fwrite(buffer, len, 1, fp);
       continue;
     }

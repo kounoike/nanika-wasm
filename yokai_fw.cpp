@@ -2,6 +2,7 @@
 #include <cstdio>
 #include <cstring>
 #include <iostream>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -63,8 +64,8 @@ struct Digits {
   unsigned char fb;
 };
 
-struct alignas(4) AdditionalInfo {
-  unsigned short partial_f7;
+struct alignas(1) AdditionalInfo {
+  unsigned char partial_f7;
   unsigned char partial_fb;
   unsigned char partial_f9;
 };
@@ -77,7 +78,6 @@ struct Node {
 };
 
 struct BackwardInfo {
-  BackwardInfo *next;
   char pw[PWLEN_MAX / 2];
   AdditionalInfo info;
 };
@@ -88,14 +88,15 @@ size_t get_index(unsigned int f4, unsigned int f5, unsigned int f8,
   return ret;
 }
 
-BackwardInfo **read_from_file(const char *filename, int backward_len) {
+std::multimap<size_t, BackwardInfo *> read_from_file(const char *filename,
+                                                     int backward_len) {
   // yokai_bwで作ったファイルを読み込む
-  printf("sizeof fpos_t:%lu string:%lu\n", sizeof(fpos_t), sizeof(std::string));
+  printf("sizeof fpos_t:%lu string:%lu size_t:%lu\n", sizeof(fpos_t),
+         sizeof(std::string), sizeof(size_t));
   printf("sizeof BackwardInfo:%lu AdditionalInfo:%lu\n", sizeof(BackwardInfo),
          sizeof(AdditionalInfo));
   printf("Read from file start\n");
-  BackwardInfo **list = (BackwardInfo **)calloc(
-      sizeof(BackwardInfo *), static_cast<size_t>(256) * 256 * 256 * 256);
+  std::multimap<size_t, BackwardInfo *> map;
   printf(" calloc done.\n");
 
   FILE *fp = fopen(filename, "rb");
@@ -109,28 +110,24 @@ BackwardInfo **read_from_file(const char *filename, int backward_len) {
     unsigned char buffer[len];
     BackwardInfo *p_bw_info = new BackwardInfo();
     BackwardInfo &bw_info = *p_bw_info;
-    bw_info.next = nullptr;
 
     fread(buffer, len, 1, fp);
     unsigned char f4 = buffer[0];
     unsigned char f5 = buffer[1];
     unsigned char f8 = buffer[2];
     unsigned char fa = buffer[3];
-    bw_info.info.partial_f7 = (buffer[4] << 8) | buffer[5];
-    bw_info.info.partial_f9 = buffer[6];
-    bw_info.info.partial_fb = buffer[7];
-    memcpy(bw_info.pw, &buffer[8], backward_len);
+    bw_info.info.partial_f7 = buffer[4];
+    bw_info.info.partial_f9 = buffer[5];
+    bw_info.info.partial_fb = buffer[6];
+    memcpy(bw_info.pw, &buffer[7], backward_len);
     bw_info.pw[backward_len] = '\0';
     size_t index = get_index(f4, f5, f8, fa);
-    if (list[index]) {
-      p_bw_info->next = list[index];
-    }
-    list[index] = p_bw_info;
+    map.emplace(index, p_bw_info);
   }
 
   fclose(fp);
   printf("Read from file done. count: %llu\n", counter);
-  return list;
+  return std::move(map);
 }
 
 Node forward_step(const Node &node, unsigned char p) {
@@ -250,7 +247,7 @@ int main(int argc, char *argv[]) {
   snprintf(filename, 8 * 2 + 5, "%02X%02X%02X%02X%02X%02X%02X%02X.dat", atk31F4,
            atk31F5, atk_count, atk31F7, atk31F8, atk31F9, atk31FA, atk31FB);
 
-  auto backward_list = read_from_file(filename, atk_count / 2);
+  auto backward_map = read_from_file(filename, atk_count / 2);
 
   pool.push_back(start_node);
 
@@ -266,22 +263,21 @@ int main(int argc, char *argv[]) {
     if (node.depth >= atk_count - backward_len) {
       size_t index = get_index(node.digits.f4, node.digits.f5, node.digits.f8,
                                node.digits.fa);
-      BackwardInfo *p = backward_list[index];
+      auto p = backward_map.equal_range(index);
       // if (p != NULL) {
       //   printf("found digits in backward list. pw:%s\n", node.pw.c_str());
       // }
-      while (p != NULL) {
+      for (auto it = p.first; it != p.second; it++) {
         // printf("target depth reached: count: %llu depth:%d pw: %s index:%lu "
         //        "list[index]:%p\n",
         //        count, node.depth, node.pw.c_str(), index, p);
-        AdditionalInfo &info = p->info;
+        AdditionalInfo &info = it->second->info;
         if ((((node.digits.f7 + info.partial_f7) & 0xff) == atk31F7) &&
             ((node.digits.f9 ^ info.partial_f9) == atk31F9) &&
             (node.digits.fb + info.partial_fb == atk31FB)) {
           // 見つかった
-          printf("Hit: %s\n", (node.pw + p->pw).c_str());
+          printf("Hit: %s\n", (node.pw + it->second->pw).c_str());
         }
-        p = p->next;
       }
       // これ以上深く探索しない
       continue;
