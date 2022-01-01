@@ -425,8 +425,9 @@ int main(int argc, char *argv[]) {
 
       if (bwi_map.contains(key)) {
         std::vector<BackwardInfo> &vec = bwi_map[key];
-        vec.insert(std::upper_bound(vec.begin(), vec.end(), bwi, bwi_comp),
-                   std::move(bwi));
+        vec.push_back(std::move(bwi));
+        // vec.insert(std::upper_bound(vec.begin(), vec.end(), bwi, bwi_comp),
+        //            std::move(bwi));
       } else {
         std::vector<BackwardInfo> value;
         value.push_back(std::move(bwi));
@@ -511,6 +512,7 @@ int main(int argc, char *argv[]) {
   printf("End, count: %llu found_count: %llu\n", count, found_count);
   printf("Writing results..\n");
   for (auto it = bwi_map.begin(); it != bwi_map.end(); it++) {
+    std::sort(it->second.begin(), it->second.end(), bwi_comp);
     char filename[256];
     snprintf(filename, 256, "%s/%02X%02X", basename, it->first.first,
              it->first.second);
