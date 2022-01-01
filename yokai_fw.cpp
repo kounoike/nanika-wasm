@@ -257,7 +257,7 @@ std::vector<Node> forward_step_simd(const Node &node) {
     fb[idx] = prev.fb + A[idx] + C[idx];
 
   std::vector<Node> ret;
-  for (int i = 0; i < 42; i++) {
+  for (int i = 0; i < NUM_CHARSET; i++) {
     unsigned char c = itoa[i];
     Node new_node(node);
     new_node.pw = node.pw + atoy[c];

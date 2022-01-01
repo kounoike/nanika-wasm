@@ -119,7 +119,7 @@ unsigned int reverse_lut_fa[2][2][64][256];
 
 void create_lut() {
   for (int c_f8 = 0; c_f8 < 2; c_f8++) {
-    for (int i = 0; i < 42; i++) {
+    for (int i = 0; i < NUM_CHARSET; i++) {
       unsigned char p = itoa[i];
       for (int j = 0; j < 256; j++) {
         unsigned char prev_fa = j;
@@ -139,7 +139,7 @@ void create_lut() {
       }
     }
   }
-  for (int i = 0; i < 42; i++) {
+  for (int i = 0; i < NUM_CHARSET; i++) {
     for (int j = 0; j < 256; j++) {
       for (int k = 0; k < 256; k++) {
         unsigned char p = itoa[i];
