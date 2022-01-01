@@ -77,38 +77,6 @@ struct Node {
   std::string pw;
 };
 
-// $31F5によって決まる、xor取る値を入れたテーブル
-unsigned char lut_xor_f4[256];
-unsigned char lut_xor_f5[256];
-
-void create_lut() {
-  for (int prev_f5 = 0; prev_f5 < 256; prev_f5++) {
-    unsigned int A = 0;
-    unsigned int C = 0;
-    unsigned int next_f4 = 0;
-    unsigned int next_f5 = prev_f5;
-    for (int Y = 0; Y < 8; Y++) {
-      C = A & 0x01;
-      A >>= 1;
-
-      next_f4 |= C << 8;
-      C = next_f4 & 0x01;
-      next_f4 >>= 1;
-
-      next_f5 |= C << 8;
-      C = next_f5 & 0x01;
-      next_f5 >>= 1;
-
-      if (C > 0) {
-        next_f4 = (next_f4 ^ 0x84) & 0xFF;
-        next_f5 = (next_f5 ^ 0x08) & 0xFF;
-      }
-    }
-    lut_xor_f4[prev_f5] = next_f4 & 0xFF;
-    lut_xor_f5[prev_f5] = next_f5 & 0xFF;
-  }
-}
-
 // パスワードと次ステップの$31F4を入れると前のステップの$31F5が出るテーブル
 unsigned char reverse_lut_f5[64][256];
 // 前ステップの$31F5と前ステップの$31F5を入れると前ステップの$31F4が出るテーブル
@@ -131,7 +99,7 @@ unsigned int reverse_lut_f4f5[64][256][256];
 // X & 0xff: 前のステップの$31FA
 unsigned int reverse_lut_fa[2][2][64][256];
 
-void create_lut2() {
+void create_lut() {
   for (int c_f8 = 0; c_f8 < 2; c_f8++) {
     for (int i = 0; i < 42; i++) {
       unsigned char p = itoa[i];
@@ -248,9 +216,6 @@ Node forward_step(const Node &node, unsigned char p) {
     C = 0;
   }
   next.fa = A;
-  // printf("forward pw:[%s] c:%02X[%c] prev.fa:[%02X] c_f8:[%d]
-  // next.fa:[%02X]\n",
-  //        node.pw.c_str(), p, atoy[p], prev.fa, c_f8, next.fa);
 
   // $31FB: popcount + C
   next.fb = prev.fb + std::popcount(p) + C;
@@ -305,20 +270,6 @@ std::vector<Node> backward_step(const Node &node, unsigned char p) {
 
   // bit0の0/1で分岐
   for (int bit0 = 0; bit0 < 2; bit0++) {
-    // int c_fa = 0;
-    // // C: c_f8、A7..A0: 前$31FAの各ビットとして、
-    // // tmp: CA7A6A5A4A3A2A1 + A0 を表す
-    // unsigned int tmp = next.fa - p - 1;
-    // if (tmp < 0) {
-    //   // オーバーフロー発生
-    //   tmp += 256;
-    //   c_fa = 1;
-    // }
-    // if ((tmp & 0x80) >> 7 != c_f8) {
-    //   // $31F8計算時のキャリーと一致しなければ矛盾
-    //   continue;
-    // }
-    // prev.fa = ((tmp << 1) | bit0) & 0xff;
     unsigned int val = reverse_lut_fa[bit0][c_f8][p][next.fa];
     if ((val & 0x200) == 0) {
       // 未初期化（c_f8と矛盾しているなど）の場合スキップ
@@ -326,9 +277,6 @@ std::vector<Node> backward_step(const Node &node, unsigned char p) {
     }
     int c_fa = (val & 0x100) >> 8;
     prev.fa = val & 0xff;
-    // printf("backward pw:[%s] c:%02X[%c] node.fa[%02X] c_f8:[%d] bit0:[%d] "
-    //        "val:%04X\n",
-    //        node.pw.c_str(), p, atoy[p], node.digits.fa, c_f8, bit0, val);
 
     // 前$31FBの逆算はpopcount+$31FA計算のキャリー
     if (next.fb < std::popcount(p) + c_fa) {
@@ -364,143 +312,6 @@ std::vector<Node> backward_step(const Node &node, unsigned char p) {
   return ret;
 }
 
-// SIMDで全パスワード分一気に求める（無駄な計算もあり）
-std::vector<Node> &&backward_step_simd(const Node &node) {
-  const int BULK_SIZE = 64;
-  const Digits &next = node.digits;
-
-  unsigned char p[BULK_SIZE];
-  for (int idx = 0; idx < BULK_SIZE; idx++)
-    p[idx] = idx;
-
-  // // $31F6は変化なし
-  // prev.f6 = next.f6;
-
-  // まず、前ステップの$31F5がPWと次$31F4によって逆算
-  unsigned char prev_f5[BULK_SIZE];
-  for (int idx = 0; idx < BULK_SIZE; idx++)
-    prev_f5[idx] = reverse_lut_f5[p[idx]][next.f4];
-
-  // 次に、前ステップの$31F4が前$31F4と次$31F5によって逆算
-  unsigned char prev_f4[BULK_SIZE];
-  for (int idx = 0; idx < BULK_SIZE; idx++)
-    prev_f4[idx] = reverse_lut_f4[prev_f5[idx]][next.f5];
-
-  // 前ステップの$31F7は次ステップの$31F7, 次ステップの$31F4と0xE5の比較で逆算
-  unsigned char c_f4 = next.f4 >= 0xE5 ? 1 : 0;
-  unsigned char prev_f7[BULK_SIZE], c_f7[BULK_SIZE];
-  for (int idx = 0; idx < BULK_SIZE; idx++)
-    prev_f7[idx] = next.f7 - p[idx] - c_f4;
-  for (int idx = 0; idx < BULK_SIZE; idx++)
-    c_f7[idx] =
-        prev_f7[idx] > next.f7; // p[idx]が小さいので一周しちゃうパターンはなし
-
-  // 前$31F8の逆算
-  unsigned char prev_f8[BULK_SIZE], c_f8[BULK_SIZE];
-  for (int idx = 0; idx < BULK_SIZE; idx++)
-    prev_f8[idx] = next.f8 - next.f5 - c_f7[idx];
-  for (int idx = 0; idx < BULK_SIZE; idx++)
-    c_f8[idx] =
-        (prev_f8[idx] > next.f8) || ((c_f7[idx] == 1 && prev_f8[idx]) ==
-                                     next.f8); // 一周しちゃうパターン含む
-
-  // 前$31f9はxorなのでそのままで逆算できる
-  unsigned char prev_f9[BULK_SIZE];
-  for (int idx = 0; idx < BULK_SIZE; idx++)
-    prev_f9[idx] = next.f9 ^ p[idx];
-
-  // 前$31FAの逆算はちょっとややこしい
-  // ROR → PWとADCの2命令で求めている
-  // つまり、前$31FAのbit0と前$31FAの右1bitローテートを加算している。
-  // そのため、0/1で分岐する必要がある
-  // その代わり、次$31FA - PWで出てくる値と、
-  // $31F8計算時のCの値が一致しなければ枝狩りが可能
-
-  // bit0の0/1で分岐
-  // まずはbit0=0のとき
-  unsigned char prev_fa_0[BULK_SIZE], c_fa_0[BULK_SIZE], tmp_0[BULK_SIZE];
-  for (int idx = 0; idx < BULK_SIZE; idx++)
-    tmp_0[idx] = next.fa - p[idx];
-  for (int idx = 0; idx < BULK_SIZE; idx++)
-    prev_fa_0[idx] = tmp_0[idx] << 1;
-  for (int idx = 0; idx < BULK_SIZE; idx++)
-    c_fa_0[idx] =
-        tmp_0[idx] > next.fa; // p[idx]が小さいので一周しちゃうパターンはなし
-
-  // 次にbit0=1のとき
-  unsigned char prev_fa_1[BULK_SIZE], c_fa_1[BULK_SIZE], tmp_1[BULK_SIZE];
-  for (int idx = 0; idx < BULK_SIZE; idx++)
-    tmp_1[idx] = next.fa - p[idx] - 1;
-  for (int idx = 0; idx < BULK_SIZE; idx++)
-    prev_fa_1[idx] = tmp_1[idx] << 1 | 0x01;
-  for (int idx = 0; idx < BULK_SIZE; idx++)
-    c_fa_1[idx] =
-        tmp_1[idx] > next.fa; // p[idx]が小さいので一周しちゃうパターンはなし
-
-  // 前$31FBの逆算はpopcount+$31FA計算のキャリー
-  unsigned char prev_fb_0[BULK_SIZE], c_fb_0[BULK_SIZE], prev_fb_1[BULK_SIZE],
-      c_fb_1[BULK_SIZE];
-  unsigned char pc[BULK_SIZE];
-  for (int idx = 0; idx < BULK_SIZE; idx++)
-    pc[idx] = std::popcount(p[idx]);
-
-  for (int idx = 0; idx < BULK_SIZE; idx++)
-    prev_fb_0[idx] = next.fb - pc[idx] - c_fa_0[idx];
-  for (int idx = 0; idx < BULK_SIZE; idx++)
-    prev_fb_1[idx] = next.fb - pc[idx] - c_fa_1[idx];
-  for (int idx = 0; idx < BULK_SIZE; idx++)
-    c_fb_0[idx] = prev_fb_0[idx] >
-                  next.fb; // pc[idx]が小さいので一周しちゃうパターンはなし
-  for (int idx = 0; idx < BULK_SIZE; idx++)
-    c_fb_1[idx] = prev_fb_1[idx] >
-                  next.fb; // pc[idx]が小さいので一周しちゃうパターンはなし
-
-  std::vector<Node> ret;
-  for (int i = 0; i < NUM_CHARSET; i++) {
-    unsigned char c = itoa[i];
-    // $31F8計算時のキャリーと$31FA計算途中式に矛盾が無く、$31FBの計算時にキャリーしてなければ次の探索に進む
-    if ((tmp_0[c] & 0x80) >> 7 == c_f8[c] && c_fb_0[c] == 0) {
-      Node new_node;
-      new_node.depth = node.depth + 1;
-      new_node.pw = std::string("") + atoy[c] + node.pw;
-      new_node.digits.f4 = prev_f4[c];
-      new_node.digits.f5 = prev_f5[c];
-      new_node.digits.f6 = node.digits.f6;
-      new_node.digits.f7 = prev_f7[c];
-      new_node.digits.f8 = prev_f8[c];
-      new_node.digits.f9 = prev_f9[c];
-      new_node.digits.fa = prev_fa_0[c];
-      new_node.digits.fb = prev_fb_0[c];
-      new_node.info.partial_f7 =
-          node.info.partial_f7 + c + (node.digits.f4 > 0xE5 ? 1 : 0);
-      new_node.info.partial_f9 = node.info.partial_f9 ^ c;
-      new_node.info.partial_fb = node.info.partial_fb + pc[c] + c_fa_0[c];
-      ret.push_back(std::move(new_node));
-    }
-
-    if ((tmp_1[c] & 0x80) >> 7 == c_f8[c] && c_fb_1[c] == 0) {
-      Node new_node;
-      new_node.depth = node.depth + 1;
-      new_node.pw = std::string("") + atoy[c] + node.pw;
-      new_node.digits.f4 = prev_f4[c];
-      new_node.digits.f5 = prev_f5[c];
-      new_node.digits.f6 = node.digits.f6;
-      new_node.digits.f7 = prev_f7[c];
-      new_node.digits.f8 = prev_f8[c];
-      new_node.digits.f9 = prev_f9[c];
-      new_node.digits.fa = prev_fa_1[c];
-      new_node.digits.fb = prev_fb_1[c];
-      new_node.info.partial_f7 =
-          node.info.partial_f7 + c + (node.digits.f4 > 0xE5 ? 1 : 0);
-      new_node.info.partial_f9 = node.info.partial_f9 ^ c;
-      new_node.info.partial_fb = node.info.partial_fb + pc[c] + c_fa_1[c];
-      ret.push_back(std::move(new_node));
-    }
-  }
-
-  return std::move(ret);
-}
-
 int main(int argc, char *argv[]) {
   int atk_count = 1;
   int atk31F4 = 0, atk31F5 = 0, atk31F7 = 0, atk31F8 = 0, atk31F9 = 0,
@@ -525,7 +336,6 @@ int main(int argc, char *argv[]) {
 
   printf("LUTの計算開始\n");
   create_lut();
-  create_lut2();
   printf("LUTの計算完了\n");
 
   std::vector<Node> pool;
