@@ -9,6 +9,7 @@
 
 const int PWLEN_MAX = 16;
 const int NUM_CHARSET = 42;
+const int BULK_SIZE = 64;
 
 // 文字コード変換テーブル
 char atoy[256] = {
@@ -159,6 +160,114 @@ Node forward_step(const Node &node, unsigned char p) {
   return new_node;
 }
 
+std::vector<Node> forward_step_simd(const Node &node) {
+  const Digits &prev = node.digits;
+  unsigned char p[BULK_SIZE];
+  unsigned char A[BULK_SIZE], A1[BULK_SIZE], C[BULK_SIZE], C1[BULK_SIZE];
+
+  for (int idx = 0; idx < BULK_SIZE; idx++)
+    p[idx] = idx;
+
+  unsigned char f4[BULK_SIZE], f5[BULK_SIZE], f7[BULK_SIZE], f8[BULK_SIZE],
+      f9[BULK_SIZE], fa[BULK_SIZE], fb[BULK_SIZE];
+
+  // $31F4, $31F5
+  for (int idx = 0; idx < BULK_SIZE; idx++)
+    f4[idx] = prev.f4;
+  for (int idx = 0; idx < BULK_SIZE; idx++)
+    f5[idx] = prev.f5;
+  for (int idx = 0; idx < BULK_SIZE; idx++)
+    A[idx] = p[idx];
+
+  for (int Y = 0; Y < 8; Y++) {
+    for (int idx = 0; idx < BULK_SIZE; idx++)
+      C[idx] = A[idx] & 0x80;
+    for (int idx = 0; idx < BULK_SIZE; idx++)
+      A[idx] <<= 1;
+
+    for (int idx = 0; idx < BULK_SIZE; idx++)
+      C1[idx] = f4[idx] & 0x01;
+    for (int idx = 0; idx < BULK_SIZE; idx++)
+      f4[idx] = (f4[idx] >> 1) | C[idx];
+    for (int idx = 0; idx < BULK_SIZE; idx++)
+      C[idx] = f5[idx] & 0x01;
+    for (int idx = 0; idx < BULK_SIZE; idx++)
+      f5[idx] = (f5[idx] >> 1) | (C1[idx] << 7);
+
+    for (int idx = 0; idx < BULK_SIZE; idx++)
+      f4[idx] ^= C[idx] > 0 ? 0x84 : 0;
+    for (int idx = 0; idx < BULK_SIZE; idx++)
+      f5[idx] ^= C[idx] > 0 ? 0x08 : 0;
+  }
+
+  // $31F7, $31F8
+  for (int idx = 0; idx < BULK_SIZE; idx++)
+    C[idx] = f4[idx] >= 0xE5 ? 1 : 0;
+  for (int idx = 0; idx < BULK_SIZE; idx++)
+    A[idx] = p[idx] + prev.f7 + C[idx];
+  for (int idx = 0; idx < BULK_SIZE; idx++)
+    C[idx] = A[idx] < prev.f7 ? 1 : 0;
+  for (int idx = 0; idx < BULK_SIZE; idx++)
+    f7[idx] = A[idx];
+
+  for (int idx = 0; idx < BULK_SIZE; idx++)
+    A[idx] = prev.f8 + f5[idx] + C[idx];
+  for (int idx = 0; idx < BULK_SIZE; idx++)
+    C[idx] = (A[idx] < prev.f8 || (C[idx] > 0 && prev.f8 == A[idx]));
+  for (int idx = 0; idx < BULK_SIZE; idx++)
+    f8[idx] = A[idx];
+
+  // $31F9: xor
+  for (int idx = 0; idx < BULK_SIZE; idx++)
+    f9[idx] = prev.f9 ^ p[idx];
+
+  // $31FA
+  unsigned char C2 = prev.fa & 0x01;
+  for (int idx = 0; idx < BULK_SIZE; idx++)
+    A[idx] = (prev.fa >> 1) | (C[idx] << 7); // $31F8計算時のCがここで入る
+  for (int idx = 0; idx < BULK_SIZE; idx++)
+    fa[idx] = p[idx] + A[idx] + C2;
+  for (int idx = 0; idx < BULK_SIZE; idx++)
+    C[idx] = fa[idx] < A[idx];
+
+  // printf("forward pw:[%s] c:%02X[%c] prev.fa:[%02X] c_f8:[%d]
+  // next.fa:[%02X]\n",
+  //        node.pw.c_str(), p, atoy[p], prev.fa, c_f8, next.fa);
+
+  // $31FB: popcount + C
+  for (int idx = 0; idx < BULK_SIZE; idx++)
+    A[idx] = 0;
+  for (int idx = 0; idx < BULK_SIZE; idx++)
+    A1[idx] = p[idx];
+  for (int Y = 0; Y < 6; Y++) {
+    for (int idx = 0; idx < BULK_SIZE; idx++)
+      A[idx] += A1[idx] & 0x01;
+    for (int idx = 0; idx < BULK_SIZE; idx++)
+      A1[idx] >>= 1;
+  }
+  for (int idx = 0; idx < BULK_SIZE; idx++)
+    fb[idx] = prev.fb + A[idx] + C[idx];
+
+  std::vector<Node> ret;
+  for (int i = 0; i < 42; i++) {
+    unsigned char c = itoa[i];
+    Node new_node(node);
+    new_node.pw = node.pw + atoy[c];
+    new_node.depth = node.depth + 1;
+    new_node.digits.f4 = f4[c];
+    new_node.digits.f5 = f5[c];
+    new_node.digits.f6 = prev.f6;
+    new_node.digits.f7 = f7[c];
+    new_node.digits.f8 = f8[c];
+    new_node.digits.f9 = f9[c];
+    new_node.digits.fa = fa[c];
+    new_node.digits.fb = fb[c];
+    ret.push_back(std::move(new_node));
+  }
+
+  return ret;
+}
+
 int main(int argc, char *argv[]) {
   int atk_count = 1;
   int atk31F4 = 0, atk31F5 = 0, atk31F7 = 0, atk31F8 = 0, atk31F9 = 0,
@@ -269,13 +378,8 @@ int main(int argc, char *argv[]) {
       continue;
     }
 
-    for (int i = 0; i < NUM_CHARSET; i++) {
-      unsigned char c = itoa[i];
-      Node new_node = forward_step(node, c);
-      // printf("Create new node. depth:%d c:%02X old_pw:%s new_pw:%s\n",
-      //        new_node.depth, c, node.pw.c_str(), new_node.pw.c_str());
-      pool.push_back(std::move(new_node));
-    }
+    std::vector<Node> new_nodes = forward_step_simd(node);
+    pool.insert(pool.end(), new_nodes.begin(), new_nodes.end());
   }
   printf("End, count: %llu found_count: %llu\n", count, found_count);
   return 0;
