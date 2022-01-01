@@ -2,5 +2,9 @@ yokai
 yokai_check
 yokai_dfs
 yokai_dfs_threads
+yokai_bw
+yokai_fw
 *.hit.txt
 password/
+*.dat
+dat_*/
