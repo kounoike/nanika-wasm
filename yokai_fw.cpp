@@ -88,48 +88,6 @@ size_t get_index(unsigned int f4, unsigned int f5, unsigned int f8,
   return ret;
 }
 
-std::multimap<size_t, BackwardInfo *> read_from_file(const char *filename,
-                                                     int backward_len) {
-  // yokai_bwで作ったファイルを読み込む
-  printf("sizeof fpos_t:%lu string:%lu size_t:%lu\n", sizeof(fpos_t),
-         sizeof(std::string), sizeof(size_t));
-  printf("sizeof BackwardInfo:%lu AdditionalInfo:%lu\n", sizeof(BackwardInfo),
-         sizeof(AdditionalInfo));
-  printf("Read from file start\n");
-  std::multimap<size_t, BackwardInfo *> map;
-  printf(" calloc done.\n");
-
-  FILE *fp = fopen(filename, "rb");
-  unsigned long long counter = 0;
-  while (!feof(fp)) {
-    counter++;
-    if (counter % 1000000 == 0) {
-      printf(" counter: %llu\n", counter);
-    }
-    int len = 4 + 4 + backward_len;
-    unsigned char buffer[len];
-    BackwardInfo *p_bw_info = new BackwardInfo();
-    BackwardInfo &bw_info = *p_bw_info;
-
-    fread(buffer, len, 1, fp);
-    unsigned char f4 = buffer[0];
-    unsigned char f5 = buffer[1];
-    unsigned char f8 = buffer[2];
-    unsigned char fa = buffer[3];
-    bw_info.info.partial_f7 = buffer[4];
-    bw_info.info.partial_f9 = buffer[5];
-    bw_info.info.partial_fb = buffer[6];
-    memcpy(bw_info.pw, &buffer[7], backward_len);
-    bw_info.pw[backward_len] = '\0';
-    size_t index = get_index(f4, f5, f8, fa);
-    map.emplace(index, p_bw_info);
-  }
-
-  fclose(fp);
-  printf("Read from file done. count: %llu\n", counter);
-  return std::move(map);
-}
-
 Node forward_step(const Node &node, unsigned char p) {
   // 基本情報
   Node new_node(node);
@@ -243,11 +201,9 @@ int main(int argc, char *argv[]) {
   start_node.digits.fa = 0;
   start_node.digits.fb = 0;
 
-  char filename[128];
-  snprintf(filename, 8 * 2 + 5, "%02X%02X%02X%02X%02X%02X%02X%02X.dat", atk31F4,
+  char basepart[256];
+  snprintf(basepart, 256, "dat_%02X%02X%02X%02X%02X%02X%02X%02X", atk31F4,
            atk31F5, atk_count, atk31F7, atk31F8, atk31F9, atk31FA, atk31FB);
-
-  auto backward_map = read_from_file(filename, atk_count / 2);
 
   pool.push_back(start_node);
 
@@ -259,26 +215,46 @@ int main(int argc, char *argv[]) {
     Node node = pool.back();
     pool.pop_back();
 
+    // $31FBベース枝狩り
+    int rem_chars = atk_count - node.depth;
+    const unsigned char &fb = node.digits.fb;
+    if (fb > atk31FB || fb + 5 * rem_chars < atk31FB) {
+      continue;
+    }
+
     // 目標深さに到達
     if (node.depth >= atk_count - backward_len) {
-      size_t index = get_index(node.digits.f4, node.digits.f5, node.digits.f8,
-                               node.digits.fa);
-      auto p = backward_map.equal_range(index);
-      // if (p != NULL) {
-      //   printf("found digits in backward list. pw:%s\n", node.pw.c_str());
-      // }
-      for (auto it = p.first; it != p.second; it++) {
-        // printf("target depth reached: count: %llu depth:%d pw: %s index:%lu "
-        //        "list[index]:%p\n",
-        //        count, node.depth, node.pw.c_str(), index, p);
-        AdditionalInfo &info = it->second->info;
-        if ((((node.digits.f7 + info.partial_f7) & 0xff) == atk31F7) &&
+      char filename[256];
+      snprintf(filename, 256, "%s/%02X%02X", basepart, node.digits.f4,
+               node.digits.f5);
+      FILE *fp;
+      fp = fopen(filename, "rb");
+      if (!fp) {
+        continue;
+      }
+      int count = 0;
+      size_t len = 2 + 3 + backward_len;
+      unsigned char buffer[len + 1];
+      while (fread(buffer, len, 1, fp) == 1) {
+        count++;
+        buffer[len] = '\0';
+        AdditionalInfo info;
+        unsigned char f8 = buffer[0];
+        unsigned char fa = buffer[1];
+        info.partial_f7 = buffer[2];
+        info.partial_f9 = buffer[3];
+        info.partial_fb = buffer[4];
+        std::string pw = std::string((char *)&buffer[5]);
+        if ((f8 == node.digits.f8) && (fa == node.digits.fa) &&
+            (((node.digits.f7 + info.partial_f7) & 0xff) == atk31F7) &&
             ((node.digits.f9 ^ info.partial_f9) == atk31F9) &&
             (node.digits.fb + info.partial_fb == atk31FB)) {
           // 見つかった
-          printf("Hit: %s\n", (node.pw + it->second->pw).c_str());
+          printf("Hit: %s in filename:[%s] count:%d\n", (node.pw + pw).c_str(),
+                 filename, count);
         }
       }
+      fclose(fp);
       // これ以上深く探索しない
       continue;
     }

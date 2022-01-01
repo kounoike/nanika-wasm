@@ -2,6 +2,7 @@
 #include <cassert>
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -545,10 +546,15 @@ int main(int argc, char *argv[]) {
   start_node.digits.fa = atk31FA;
   start_node.digits.fb = atk31FB;
 
-  char filename[128];
-  snprintf(filename, 8 * 2 + 5, "%02X%02X%02X%02X%02X%02X%02X%02X.dat", atk31F4,
+  char basename[256];
+  snprintf(basename, 256, "dat_%02X%02X%02X%02X%02X%02X%02X%02X", atk31F4,
            atk31F5, atk_count, atk31F7, atk31F8, atk31F9, atk31FA, atk31FB);
-  FILE *fp = fopen(filename, "wb");
+  if (std::filesystem::exists(basename)) {
+    printf("%s: 既に作成済みです。再生成するときは一度消してください。\n",
+           basename);
+    return 0;
+  }
+  std::filesystem::create_directories(basename);
 
   pool.push_back(std::move(start_node));
 
@@ -565,72 +571,76 @@ int main(int argc, char *argv[]) {
     // 目標深さに到達
     if (node.depth >= backward_len) {
       found_count++;
-      int len = 4 + 3 + node.pw.length();
+      int len = 2 + 3 + node.pw.length();
       unsigned char buffer[len];
-      buffer[0] = node.digits.f4;
-      buffer[1] = node.digits.f5;
-      buffer[2] = node.digits.f8;
-      buffer[3] = node.digits.fa;
-      buffer[4] = node.info.partial_f7 & 0xff;
-      buffer[5] = node.info.partial_f9;
-      buffer[6] = node.info.partial_fb & 0xff;
-      memcpy(&buffer[7], node.pw.c_str(), backward_len);
+      buffer[0] = node.digits.f8;
+      buffer[1] = node.digits.fa;
+      buffer[2] = node.info.partial_f7 & 0xff;
+      buffer[3] = node.info.partial_f9;
+      buffer[4] = node.info.partial_fb & 0xff;
+      memcpy(&buffer[5], node.pw.c_str(), backward_len);
+
+      char filename[256];
+      snprintf(filename, 256, "%s/%02X%02X", basename, node.digits.f4,
+               node.digits.f5);
+
+      FILE *fp = fopen(filename, "ab");
       fwrite(buffer, len, 1, fp);
+      fclose(fp);
       continue;
     }
 
     for (int i = 0; i < NUM_CHARSET; i++) {
       unsigned char c = itoa[i];
       std::vector<Node> new_nodes = backward_step(node, c);
-      for (auto n : new_nodes) {
-        Node n2 = forward_step(n, c);
-        if (node.digits.f4 != n2.digits.f4) {
-          printf("F4 mismatch!: pw:%s c:%02X[%c] node.f4:[%02X] "
-                 "bw.f4:[%02X] bw->fw.f4:[%02X] bw.f5:[%02X]\n",
-                 node.pw.c_str(), c, atoy[c], node.digits.f4, n.digits.f4,
-                 n2.digits.f4, n.digits.f5);
-        }
-        if (node.digits.f5 != n2.digits.f5) {
-          printf("F5 mismatch!: pw:%s c:%02X[%c] node.f5:[%02X] "
-                 "bw.f5:[%02X] bw->fw.f5:[%02X]\n",
-                 node.pw.c_str(), c, atoy[c], node.digits.f5, n.digits.f5,
-                 n2.digits.f5);
-        }
-        if (node.digits.f7 != n2.digits.f7) {
-          printf("F7 mismatch!: pw:%s c:%02X[%c] node.f7:[%02X] "
-                 "bw.f7:[%02X] bw->fw.f7:[%02X]\n",
-                 node.pw.c_str(), c, atoy[c], node.digits.f7, n.digits.f7,
-                 n2.digits.f7);
-        }
-        if (node.digits.f8 != n2.digits.f8) {
-          printf("F8 mismatch!: pw:%s c:%02X[%c] node.f8:[%02X] "
-                 "bw.f8:[%02X] bw->fw.f8:[%02X]\n",
-                 node.pw.c_str(), c, atoy[c], node.digits.f8, n.digits.f8,
-                 n2.digits.f8);
-        }
-        if (node.digits.f9 != n2.digits.f9) {
-          printf("F9 mismatch!: pw:%s c:%02X[%c] node.f9:[%02X] "
-                 "bw.f9:[%02X] bw->fw.f9:[%02X]\n",
-                 node.pw.c_str(), c, atoy[c], node.digits.f9, n.digits.f9,
-                 n2.digits.f9);
-        }
-        if (node.digits.fa != n2.digits.fa) {
-          printf("FA mismatch!: pw:%s c:%02X[%c] node.fa:[%02X] "
-                 "bw.fa:[%02X] bw->fw.fa:[%02X]\n",
-                 node.pw.c_str(), c, atoy[c], node.digits.fa, n.digits.fa,
-                 n2.digits.fa);
-        }
-        if (node.digits.fb != n2.digits.fb) {
-          printf("FB mismatch!: pw:%s c:%02X[%c] node.fb:[%02X] "
-                 "bw.fb:[%02X] bw->fw.fb:[%02X]\n",
-                 node.pw.c_str(), c, atoy[c], node.digits.fb, n.digits.fb,
-                 n2.digits.fb);
-        }
-      }
+      // for (auto n : new_nodes) {
+      //   Node n2 = forward_step(n, c);
+      //   if (node.digits.f4 != n2.digits.f4) {
+      //     printf("F4 mismatch!: pw:%s c:%02X[%c] node.f4:[%02X] "
+      //            "bw.f4:[%02X] bw->fw.f4:[%02X] bw.f5:[%02X]\n",
+      //            node.pw.c_str(), c, atoy[c], node.digits.f4, n.digits.f4,
+      //            n2.digits.f4, n.digits.f5);
+      //   }
+      //   if (node.digits.f5 != n2.digits.f5) {
+      //     printf("F5 mismatch!: pw:%s c:%02X[%c] node.f5:[%02X] "
+      //            "bw.f5:[%02X] bw->fw.f5:[%02X]\n",
+      //            node.pw.c_str(), c, atoy[c], node.digits.f5, n.digits.f5,
+      //            n2.digits.f5);
+      //   }
+      //   if (node.digits.f7 != n2.digits.f7) {
+      //     printf("F7 mismatch!: pw:%s c:%02X[%c] node.f7:[%02X] "
+      //            "bw.f7:[%02X] bw->fw.f7:[%02X]\n",
+      //            node.pw.c_str(), c, atoy[c], node.digits.f7, n.digits.f7,
+      //            n2.digits.f7);
+      //   }
+      //   if (node.digits.f8 != n2.digits.f8) {
+      //     printf("F8 mismatch!: pw:%s c:%02X[%c] node.f8:[%02X] "
+      //            "bw.f8:[%02X] bw->fw.f8:[%02X]\n",
+      //            node.pw.c_str(), c, atoy[c], node.digits.f8, n.digits.f8,
+      //            n2.digits.f8);
+      //   }
+      //   if (node.digits.f9 != n2.digits.f9) {
+      //     printf("F9 mismatch!: pw:%s c:%02X[%c] node.f9:[%02X] "
+      //            "bw.f9:[%02X] bw->fw.f9:[%02X]\n",
+      //            node.pw.c_str(), c, atoy[c], node.digits.f9, n.digits.f9,
+      //            n2.digits.f9);
+      //   }
+      //   if (node.digits.fa != n2.digits.fa) {
+      //     printf("FA mismatch!: pw:%s c:%02X[%c] node.fa:[%02X] "
+      //            "bw.fa:[%02X] bw->fw.fa:[%02X]\n",
+      //            node.pw.c_str(), c, atoy[c], node.digits.fa, n.digits.fa,
+      //            n2.digits.fa);
+      //   }
+      //   if (node.digits.fb != n2.digits.fb) {
+      //     printf("FB mismatch!: pw:%s c:%02X[%c] node.fb:[%02X] "
+      //            "bw.fb:[%02X] bw->fw.fb:[%02X]\n",
+      //            node.pw.c_str(), c, atoy[c], node.digits.fb, n.digits.fb,
+      //            n2.digits.fb);
+      //   }
+      // }
       // std::vector<Node> new_nodes = backward_step_simd(node);
       pool.insert(pool.end(), new_nodes.begin(), new_nodes.end());
     }
   }
   printf("End, count: %llu found_count: %llu\n", count, found_count);
-  fclose(fp);
 }
