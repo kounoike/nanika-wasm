@@ -294,9 +294,9 @@ std::vector<Node> forward_step_simd(const Node &node) {
 }
 
 void calc_thread(ThreadInfo &ti, std::mutex &mtx,
-                 std::vector<BackwardInfo> &backward_vector, int atk_count,
-                 int fbmin, int fbmax, int backward_len, int atk31F7,
-                 int atk31F9, int atk31FB, char *basepart) {
+                 std::vector<BackwardInfo> &backward_vector, FILE *result_fp,
+                 int atk_count, int fbmin, int fbmax, int backward_len,
+                 int atk31F7, int atk31F9, int atk31FB, char *basepart) {
   std::vector<Node> pool;
   pool.push_back(ti.start_node);
 
@@ -335,7 +335,11 @@ void calc_thread(ThreadInfo &ti, std::mutex &mtx,
             (node.digits.fb + it->partial_fb == atk31FB)) {
           // 見つかった
           std::lock_guard<std::mutex> lock(mtx);
-          printf("Hit: %s\n", (node.pw + it->pw).c_str());
+          char pw[PWLEN_MAX];
+          memset(pw, 0x00, PWLEN_MAX);
+          memcpy(pw, it->pw, backward_len);
+          // printf("Hit: %s\n", (node.pw + pw).c_str());
+          fputs((node.pw + pw + "\n").c_str(), result_fp);
           found_count++;
         }
       }
@@ -439,6 +443,16 @@ int main(int argc, char *argv[]) {
   assert(read_num == num);
   fclose(backward_fp);
 
+  // 結果ファイルオープン
+  char result_filename[256];
+  snprintf(result_filename, 256, "%s/result%s%s.txt", basepart,
+           prefix_count > 0 ? "_" : "", start_node.pw.c_str());
+  FILE *result_fp = fopen(result_filename, "w");
+  if (!result_fp) {
+    printf("結果ファイルオープンエラー\n");
+    return 0;
+  }
+
   std::vector<ThreadInfo> thread_info_vector;
   for (int i = 0; i < NUM_CHARSET; i++) {
     unsigned char p1 = itoa[i];
@@ -464,8 +478,8 @@ int main(int argc, char *argv[]) {
   for (int i = 0; i < cpu_count; i++) {
     threads.push_back(std::thread([&, create_count]() {
       calc_thread(thread_info_vector[create_count], mtx, backward_vector,
-                  atk_count, fbmin, fbmax, backward_len, atk31F7, atk31F9,
-                  atk31FB, basepart);
+                  result_fp, atk_count, fbmin, fbmax, backward_len, atk31F7,
+                  atk31F9, atk31FB, basepart);
     }));
     current_targets.push_back(create_count);
     create_count++;
@@ -478,8 +492,8 @@ int main(int argc, char *argv[]) {
         threads[i].join();
         threads[i] = std::thread([&, create_count]() {
           calc_thread(thread_info_vector[create_count], mtx, backward_vector,
-                      atk_count, fbmin, fbmax, backward_len, atk31F7, atk31F9,
-                      atk31FB, basepart);
+                      result_fp, atk_count, fbmin, fbmax, backward_len, atk31F7,
+                      atk31F9, atk31FB, basepart);
         });
         current_targets[i] = create_count;
         create_count++;
@@ -501,5 +515,6 @@ int main(int argc, char *argv[]) {
   }
 
   printf("End\n");
+  fclose(result_fp);
   return 0;
 }
