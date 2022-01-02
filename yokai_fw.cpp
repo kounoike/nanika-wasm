@@ -16,6 +16,7 @@ const int PWLEN_MAX = 16;
 const int NUM_CHARSET_nmc = 42;
 const int NUM_CHARSET = 39;
 const int BULK_SIZE = 64;
+const int BWLEN_MAX = 6;
 
 // 文字コード変換テーブル
 char atoy[256] = {
@@ -86,12 +87,14 @@ struct Node {
 };
 
 struct BackwardInfo {
+  unsigned char f4;
+  unsigned char f5;
   unsigned char f8;
   unsigned char fa;
   unsigned char partial_f7;
   unsigned char partial_f9;
   unsigned char partial_fb;
-  char pw[PWLEN_MAX / 2];
+  char pw[BWLEN_MAX];
 };
 
 struct ThreadInfo {
@@ -101,10 +104,14 @@ struct ThreadInfo {
 };
 
 bool bwi_comp(const BackwardInfo &a, const BackwardInfo &b) {
-  if (a.f8 == b.f8)
-    return a.fa < b.fa;
-  else
+  if (a.f4 != b.f4)
+    return a.f4 < b.f4;
+  else if (a.f5 != b.f5)
+    return a.f5 < b.f5;
+  else if (a.f8 != b.f8)
     return a.f8 < b.f8;
+  else
+    return a.fa < b.fa;
 };
 
 Node forward_step(const Node &node, unsigned char p) {
@@ -286,9 +293,10 @@ std::vector<Node> forward_step_simd(const Node &node) {
   return ret;
 }
 
-void calc_thread(ThreadInfo &ti, std::mutex &mtx, int atk_count, int fbmin,
-                 int fbmax, int backward_len, int atk31F7, int atk31F9,
-                 int atk31FB, char *basepart) {
+void calc_thread(ThreadInfo &ti, std::mutex &mtx,
+                 std::vector<BackwardInfo> &backward_vector, int atk_count,
+                 int fbmin, int fbmax, int backward_len, int atk31F7,
+                 int atk31F9, int atk31FB, char *basepart) {
   std::vector<Node> pool;
   pool.push_back(ti.start_node);
 
@@ -303,6 +311,9 @@ void calc_thread(ThreadInfo &ti, std::mutex &mtx, int atk_count, int fbmin,
     // $31FBベース枝狩り
     int rem_chars = atk_count - node.depth;
     const unsigned char &fb = node.digits.fb;
+    // if (fb > atk31FB || fb + 5 * rem_chars < atk31FB) {
+    //   continue;
+    // }
     if (fb + fbmin > atk31FB ||
         fb + 5 * (rem_chars - backward_len) + fbmax < atk31FB) {
       continue;
@@ -310,37 +321,21 @@ void calc_thread(ThreadInfo &ti, std::mutex &mtx, int atk_count, int fbmin,
 
     // 目標深さに到達
     if (node.depth >= atk_count - backward_len) {
-      char filename[256];
-      snprintf(filename, 256, "%s/%02X%02X", basepart, node.digits.f4,
-               node.digits.f5);
-
-      auto num = std::filesystem::file_size(filename) / sizeof(BackwardInfo);
-
-      FILE *fp;
-      fp = fopen(filename, "rb");
-      if (!fp) {
-        continue;
-      }
-
-      std::vector<BackwardInfo> vec(num);
-      auto read_num = fread(&vec[0], sizeof(BackwardInfo), num, fp);
-      assert(read_num == num);
-      fclose(fp);
-
       BackwardInfo bwi_for_comp;
+      bwi_for_comp.f4 = node.digits.f4;
+      bwi_for_comp.f5 = node.digits.f5;
       bwi_for_comp.f8 = node.digits.f8;
       bwi_for_comp.fa = node.digits.fa;
 
-      auto p = std::equal_range(vec.begin(), vec.end(), bwi_for_comp, bwi_comp);
+      auto p = std::equal_range(backward_vector.begin(), backward_vector.end(),
+                                bwi_for_comp, bwi_comp);
       for (auto it = p.first; it != p.second; it++) {
-        if ((it->f8 == node.digits.f8) && (it->fa == node.digits.fa) &&
-            (((node.digits.f7 + it->partial_f7) & 0xff) == atk31F7) &&
+        if ((((node.digits.f7 + it->partial_f7) & 0xff) == atk31F7) &&
             ((node.digits.f9 ^ it->partial_f9) == atk31F9) &&
             (node.digits.fb + it->partial_fb == atk31FB)) {
           // 見つかった
           std::lock_guard<std::mutex> lock(mtx);
-          printf("Hit: %s in filename:[%s] count:%lu\n",
-                 (node.pw + it->pw).c_str(), filename, vec.size());
+          printf("Hit: %s\n", (node.pw + it->pw).c_str());
           found_count++;
         }
       }
@@ -390,7 +385,7 @@ int main(int argc, char *argv[]) {
     printf("最初からスタートします\n");
   }
 
-  int backward_len = atk_count / 2;
+  int backward_len = std::min(atk_count / 2, BWLEN_MAX);
   printf("Backward_len: %d\n", backward_len);
 
   // 最初を入れる
@@ -425,6 +420,25 @@ int main(int argc, char *argv[]) {
   int fbmin = minmax_buffer[0];
   int fbmax = minmax_buffer[1];
 
+  char backward_filename[256];
+  snprintf(backward_filename, 256, "%s/backward.dat", basepart);
+  FILE *backward_fp = fopen(backward_filename, "rb");
+
+  auto num =
+      std::filesystem::file_size(backward_filename) / sizeof(BackwardInfo);
+  if (!backward_fp) {
+    printf("backward.dat オープンエラー\n");
+    return 0;
+  }
+
+  // ソートされたbackward探索結果
+  printf("backward.dat 読み込み %lu件\n", num);
+  std::vector<BackwardInfo> backward_vector(num);
+  auto read_num =
+      fread(&backward_vector[0], sizeof(BackwardInfo), num, backward_fp);
+  assert(read_num == num);
+  fclose(backward_fp);
+
   std::vector<ThreadInfo> thread_info_vector;
   for (int i = 0; i < NUM_CHARSET; i++) {
     unsigned char p1 = itoa[i];
@@ -449,8 +463,9 @@ int main(int argc, char *argv[]) {
   // 最初はCPUコア数分作る
   for (int i = 0; i < cpu_count; i++) {
     threads.push_back(std::thread([&, create_count]() {
-      calc_thread(thread_info_vector[create_count], mtx, atk_count, fbmin,
-                  fbmax, backward_len, atk31F7, atk31F9, atk31FB, basepart);
+      calc_thread(thread_info_vector[create_count], mtx, backward_vector,
+                  atk_count, fbmin, fbmax, backward_len, atk31F7, atk31F9,
+                  atk31FB, basepart);
     }));
     current_targets.push_back(create_count);
     create_count++;
@@ -462,8 +477,9 @@ int main(int argc, char *argv[]) {
       if (thread_info_vector[current_targets[i]].is_finished) {
         threads[i].join();
         threads[i] = std::thread([&, create_count]() {
-          calc_thread(thread_info_vector[create_count], mtx, atk_count, fbmin,
-                      fbmax, backward_len, atk31F7, atk31F9, atk31FB, basepart);
+          calc_thread(thread_info_vector[create_count], mtx, backward_vector,
+                      atk_count, fbmin, fbmax, backward_len, atk31F7, atk31F9,
+                      atk31FB, basepart);
         });
         current_targets[i] = create_count;
         create_count++;

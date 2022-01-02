@@ -12,6 +12,7 @@
 const int PWLEN_MAX = 16;
 const int NUM_CHARSET_nmc = 42;
 const int NUM_CHARSET = 39;
+const int BWLEN_MAX = 6;
 
 // 文字コード変換テーブル
 char atoy[256] = {
@@ -89,19 +90,25 @@ struct Node {
 };
 
 struct BackwardInfo {
+  unsigned char f4;
+  unsigned char f5;
   unsigned char f8;
   unsigned char fa;
   unsigned char partial_f7;
   unsigned char partial_f9;
   unsigned char partial_fb;
-  char pw[PWLEN_MAX / 2];
+  char pw[BWLEN_MAX];
 };
 
 bool bwi_comp(const BackwardInfo &a, const BackwardInfo &b) {
-  if (a.f8 == b.f8)
-    return a.fa < b.fa;
-  else
+  if (a.f4 != b.f4)
+    return a.f4 < b.f4;
+  else if (a.f5 != b.f5)
+    return a.f5 < b.f5;
+  else if (a.f8 != b.f8)
     return a.f8 < b.f8;
+  else
+    return a.fa < b.fa;
 };
 
 // パスワードと次ステップの$31F4を入れると前のステップの$31F5が出るテーブル
@@ -398,13 +405,12 @@ int main(int argc, char *argv[]) {
   // 探索
   unsigned long long count = 0;
   unsigned long long found_count = 0;
-  int backward_len = atk_count / 2;
+  int backward_len = std::min(atk_count / 2, BWLEN_MAX);
 
   int fbmax = 0;
   int fbmin = 10 * atk_count; // 適当に大きく。INT_MAX出してくるほどでもない
 
-  std::map<std::pair<unsigned char, unsigned char>, std::vector<BackwardInfo>>
-      bwi_map;
+  std::vector<BackwardInfo> bwi_vector;
 
   while (!pool.empty()) {
     count++;
@@ -425,6 +431,8 @@ int main(int argc, char *argv[]) {
                                                   node.digits.f5};
 
       BackwardInfo bwi;
+      bwi.f4 = node.digits.f4;
+      bwi.f5 = node.digits.f5;
       bwi.f8 = node.digits.f8;
       bwi.fa = node.digits.fa;
       bwi.partial_f7 = node.info.partial_f7;
@@ -432,16 +440,7 @@ int main(int argc, char *argv[]) {
       bwi.partial_fb = node.info.partial_fb;
       memcpy(bwi.pw, node.pw.c_str(), backward_len);
 
-      if (bwi_map.contains(key)) {
-        std::vector<BackwardInfo> &vec = bwi_map[key];
-        vec.push_back(std::move(bwi));
-        // vec.insert(std::upper_bound(vec.begin(), vec.end(), bwi, bwi_comp),
-        //            std::move(bwi));
-      } else {
-        std::vector<BackwardInfo> value;
-        value.push_back(std::move(bwi));
-        bwi_map.insert(std::make_pair(key, value));
-      }
+      bwi_vector.push_back(std::move(bwi));
 
       unsigned char fb = node.info.partial_fb & 0xff;
       if (fbmax < fb) {
@@ -519,15 +518,17 @@ int main(int argc, char *argv[]) {
     fclose(fp);
   }
   printf("End, count: %llu found_count: %llu\n", count, found_count);
-  printf("Writing results..\n");
-  for (auto it = bwi_map.begin(); it != bwi_map.end(); it++) {
-    std::sort(it->second.begin(), it->second.end(), bwi_comp);
-    char filename[256];
-    snprintf(filename, 256, "%s/%02X%02X", basename, it->first.first,
-             it->first.second);
 
-    FILE *fp = fopen(filename, "wb");
-    fwrite(&it->second[0], sizeof(BackwardInfo), it->second.size(), fp);
-    fclose(fp);
-  }
+  printf("結果ソート中\n");
+  std::sort(bwi_vector.begin(), bwi_vector.end(), bwi_comp);
+
+  printf("結果書き出し中\n");
+  char filename[256];
+  snprintf(filename, 256, "%s/backward.dat", basename);
+
+  fp = fopen(filename, "wb");
+  fwrite(&bwi_vector[0], sizeof(BackwardInfo), bwi_vector.size(), fp);
+  fclose(fp);
+
+  printf("完了\n");
 }
