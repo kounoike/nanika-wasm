@@ -88,7 +88,7 @@ int calc_digit(unsigned char *a31DC, int atk_count, int a31FBsum, int a31F9tmp,
                unsigned char atk31F9, unsigned char atk31FA,
                unsigned char atk31FB) {
   int a31F6 = 0; // 文字列長さ
-  int a31F4 = 0, a31F5 = 0, a31F7 = 0, a31F8 = 0, a31F9 = 0, a31FA = 0,
+  int a31F4 = 0, a31F5 = 0, a31F7 = 0, a31F8 = 0, a31F9 = 0, a31FA = 1,
       a31FB = 0;
   int A = 0, X = 0, Y = 0, C = 0, Z = 0;
   int i, j;
@@ -355,146 +355,23 @@ int main(int argc, char *argv[]) {
 
   int cnt = 0;
 
-  while (1) {
-    int need_check = 1;
-    cnt++;
+  cnt++;
 
-    // スタート
+  if (cnt % 1 == 0) {
 
-    // // 試しにこのタイミングで配列を全走査して
-    // // atoy[]に'*'を検出したら強制スキップさせて 高速化できないか実験
-    // // 2桁目以降に出現した場合は上位インクリメントして下位をゼロクリア
-    // for (i = 0; i < atk_count; i++) {
-    //   if (atoy[a31DC[i]] == '*') {
-    //     need_check = 0;
-    //     break;
-    //   }
-    // }
-    if (a31FBsum > atk31FB || a31FBsum + A31FBDIFF < atk31FB ||
-        a31F9tmp != atk31F9) {
-      need_check = 0;
+    printf("Current: ");
+    for (i = 0; i < atk_count; i++) {
+      printf("%02X ", a31DC[i]);
     }
-
-    if (cnt % 1 == 0) {
-
-      printf("Current: ");
-      for (i = 0; i < atk_count; i++) {
-        printf("%02X ", a31DC[i]);
-      }
-      printf("= ");
-      for (i = 0; i < atk_count; i++) {
-        printf("%c", atoy[a31DC[i]]);
-      }
-      printf(" : need_check:[%d] a31FBsum:[%02X] a31F9tmp:[%02X]\n", need_check,
-             a31FBsum, a31F9tmp);
+    printf("= ");
+    for (i = 0; i < atk_count; i++) {
+      printf("%c", atoy[a31DC[i]]);
     }
-
-    if (need_check || 1) {
-      ret = calc_digit(a31DC, atk_count, a31FBsum, a31F9tmp, atk31F4, atk31F5,
-                       atk31F7, atk31F8, atk31F9, atk31FA, atk31FB);
-      if (ret) {
-        // 見つかった
-        return 0;
-      }
-    }
-
-    // do {
-    //   // a31FBsumが足りないときは大きく動かす
-    //   int loop_start = 0;
-    //   if (a31FBsum + A31FBDIFF < atk31FB) {
-    //     int partial_sum = a31FBsum;
-    //     for (i = 0; i < atk_count; i++) {
-    //       partial_sum += 4 - a31FBskip[a31DC[i]];
-    //       if (partial_sum >= atk31FB) {
-    //         loop_start = i;
-    //         break;
-    //       }
-    //     }
-    //   }
-
-    //   // 大きすぎるときも大きく動かす
-    //   if (a31FBsum > atk31FB) {
-    //     int partial_sum = a31FBsum;
-    //     for (i = 0; i < atk_count; i++) {
-    //       partial_sum -= a31FBskip[a31DC[i]];
-    //       if (partial_sum - a31FBskip[a31DC[i]] <= atk31FB + 1) {
-    //         loop_start = i;
-    //         break;
-    //       }
-    //     }
-    //   }
-    //   // printf("loop_start: [%d]\n", loop_start);
-
-    //   // 0x00-0x35の範囲でループさせる
-    //   for (i = 0; i < loop_start; i++) {
-    //     a31FBsum -= a31FBskip[a31DC[i]];
-    //     a31F9tmp ^= a31DC[i];
-    //     a31DC[i] = 0x00;
-    //   }
-    //   for (i = loop_start; i < atk_count; i++) {
-    //     if (i == 0) {
-    //       // 最初の文字を変えるとき
-    //       //
-    //       31F9が一致していない→一致する値（0x35を超えてたら後ろで次の桁へ回す処理が働く）
-    //       //
-    //       31F9が一致している　→0x36を入れる（0x35を超えているので後ろで次の桁へ回す処理が働く）
-    //       if (a31F9tmp != atk31F9) {
-    //         a31FBsum -= a31FBskip[a31DC[i]];
-    //         a31F9tmp ^= a31DC[i];
-    //         a31DC[i] = a31F9tmp ^ atk31F9;
-    //       } else {
-    //         a31FBsum -= a31FBskip[a31DC[i]];
-    //         a31F9tmp ^= a31DC[i];
-    //         a31DC[i] = 0x36;
-    //       }
-    //     } else {
-    //       // 他の桁は1つずつ進める
-    //       a31FBsum -= a31FBskip[a31DC[i]];
-    //       a31F9tmp ^= a31DC[i];
-    //       // '*'にしない
-    //       // do {
-    //       //   a31DC[i]++;
-    //       // } while (atoy[a31DC[i]] == '*');
-    //       a31DC[i] = next_char[a31DC[i]];
-    //     }
-    //     // 0x35を超えたら次の桁へ
-    //     if (a31DC[i] > 0x35) {
-    //       a31DC[i] = 0;
-    //       a31FBsum += a31FBskip[a31DC[i]];
-    //       a31F9tmp ^= a31DC[i];
-    //     } else {
-    //       a31FBsum += a31FBskip[a31DC[i]];
-    //       a31F9tmp ^= a31DC[i];
-    //       break;
-    //     }
-    //     // 最終桁が0x36になった瞬間に脱出
-    //     if (a31DC[atk_count - 1] > 0x35) {
-    //       printf("End.\n");
-    //       return 0;
-    //     }
-    //     if (i == 9) {
-    //       printf("i==9;End.\n");
-    //       return 0;
-    //     }
-    //   }
-    // } while (a31FBsum + A31FBDIFF < atk31FB || a31FBsum > atk31FB ||
-    //          a31F9tmp != atk31F9);
-
-    // // ESCキー判定。65535回に1度しかチェックしない
-    // if (a31DC[0] == 0 && a31DC[1] == 0 && a31DC[2] == 0 && a31DC[3] == 0 &&
-    //     a31DC[4] == 0 && a31DC[5] == 0) {
-    //   printf("continue command : yokai03.exe %s %s %s %s %s %s %s %s ",
-    //   argv[1],
-    //          argv[2], argv[3], argv[4], argv[5], argv[6], argv[7],
-    //          argv[8]);
-    //   for (i = 0; i < atk_count; i++) {
-    //     printf("%02X ", a31DC[i]);
-    //   }
-    //   printf("\n");
-    //   return 0;
-    // }
-    return 0;
+    printf("\n");
   }
+
+  ret = calc_digit(a31DC, atk_count, a31FBsum, a31F9tmp, atk31F4, atk31F5,
+                   atk31F7, atk31F8, atk31F9, atk31FA, atk31FB);
 
   return 0;
 }

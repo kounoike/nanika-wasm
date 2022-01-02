@@ -422,7 +422,7 @@ int main(int argc, char *argv[]) {
     checkDigits[0].F7[idx] = 0;
     checkDigits[0].F8[idx] = 0;
     checkDigits[0].F9[idx] = 0;
-    checkDigits[0].FA[idx] = 0;
+    checkDigits[0].FA[idx] = 1;
     checkDigits[0].FB[idx] = 0;
   }
 
