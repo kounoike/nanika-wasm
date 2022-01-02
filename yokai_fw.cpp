@@ -77,17 +77,10 @@ struct Digits {
   unsigned char fb;
 };
 
-struct alignas(1) AdditionalInfo {
-  unsigned char partial_f7;
-  unsigned char partial_fb;
-  unsigned char partial_f9;
-};
-
 struct Node {
   Digits digits;
   int depth;
   std::string pw;
-  AdditionalInfo info;
 };
 
 struct BackwardInfo {
@@ -306,6 +299,21 @@ int main(int argc, char *argv[]) {
   atk31F9 = (int)strtoul(argv[6], NULL, 16);
   atk31FA = (int)strtoul(argv[7], NULL, 16);
   atk31FB = (int)strtoul(argv[8], NULL, 16);
+
+  int prefix_count = 0;
+  char prefix[PWLEN_MAX];
+  if (argc > 9) {
+    prefix_count = argc - 9;
+    printf("プレフィクス指定で動作します prefix: ");
+    for (int i = 0; i < prefix_count; i++) {
+      prefix[i] = (unsigned char)strtoul(argv[9 + i], NULL, 16);
+      printf("%02X ", prefix[i]);
+    }
+    printf("\n");
+  } else {
+    printf("最初からスタートします\n");
+  }
+
   int backward_len = atk_count / 2;
   printf("Backward_len: %d\n", backward_len);
 
@@ -315,9 +323,6 @@ int main(int argc, char *argv[]) {
   Node start_node;
   start_node.depth = 0;
   start_node.pw = std::string("");
-  start_node.info.partial_f7 = 0;
-  start_node.info.partial_f9 = 0;
-  start_node.info.partial_fb = 0;
   start_node.digits.f4 = 0;
   start_node.digits.f5 = 0;
   start_node.digits.f6 = atk_count;
@@ -326,6 +331,12 @@ int main(int argc, char *argv[]) {
   start_node.digits.f9 = 0;
   start_node.digits.fa = 0;
   start_node.digits.fb = 0;
+
+  // プレフィックス対応
+  for (int i = 0; i < prefix_count; i++) {
+    unsigned char p = prefix[i];
+    start_node = forward_step(start_node, p);
+  }
 
   char basepart[256];
   snprintf(basepart, 256, "dat_%02X%02X%02X%02X%02X%02X%02X%02X", atk31F4,
