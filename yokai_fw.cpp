@@ -402,7 +402,7 @@ int main(int argc, char *argv[]) {
   start_node.digits.f7 = 0;
   start_node.digits.f8 = 0;
   start_node.digits.f9 = 0;
-  start_node.digits.fa = 0;
+  start_node.digits.fa = 1;
   start_node.digits.fb = 0;
 
   // プレフィックス対応
