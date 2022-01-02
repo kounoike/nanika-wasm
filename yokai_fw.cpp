@@ -7,7 +7,9 @@
 #include <iostream>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 const int PWLEN_MAX = 16;
@@ -90,6 +92,12 @@ struct BackwardInfo {
   unsigned char partial_f9;
   unsigned char partial_fb;
   char pw[PWLEN_MAX / 2];
+};
+
+struct ThreadInfo {
+  int thread_id;
+  bool is_finished;
+  Node start_node;
 };
 
 bool bwi_comp(const BackwardInfo &a, const BackwardInfo &b) {
@@ -278,80 +286,11 @@ std::vector<Node> forward_step_simd(const Node &node) {
   return ret;
 }
 
-int main(int argc, char *argv[]) {
-  int atk_count = 1;
-  int atk31F4 = 0, atk31F5 = 0, atk31F7 = 0, atk31F8 = 0, atk31F9 = 0,
-      atk31FA = 0, atk31FB = 0;
-
-  // アタック目標値を設定
-  if (argc < 9) {
-    printf("yokai_bw - Backward search table creator\n");
-    printf("usage:yokai_bw $31F4 $31F5 $31F6 $31F7 $31F8 $31F9 $31FA $31FB\n");
-    return 0;
-  }
-
-  // 引数を各ターゲットに割り当て
-  atk31F4 = (int)strtoul(argv[1], NULL, 16);
-  atk31F5 = (int)strtoul(argv[2], NULL, 16);
-  atk_count = (int)strtol(argv[3], NULL, 16);
-  atk31F7 = (int)strtoul(argv[4], NULL, 16);
-  atk31F8 = (int)strtoul(argv[5], NULL, 16);
-  atk31F9 = (int)strtoul(argv[6], NULL, 16);
-  atk31FA = (int)strtoul(argv[7], NULL, 16);
-  atk31FB = (int)strtoul(argv[8], NULL, 16);
-
-  int prefix_count = 0;
-  char prefix[PWLEN_MAX];
-  if (argc > 9) {
-    prefix_count = argc - 9;
-    printf("プレフィクス指定で動作します prefix: ");
-    for (int i = 0; i < prefix_count; i++) {
-      prefix[i] = (unsigned char)strtoul(argv[9 + i], NULL, 16);
-      printf("%02X ", prefix[i]);
-    }
-    printf("\n");
-  } else {
-    printf("最初からスタートします\n");
-  }
-
-  int backward_len = atk_count / 2;
-  printf("Backward_len: %d\n", backward_len);
-
+void calc_thread(ThreadInfo &ti, std::mutex &mtx, int atk_count, int fbmin,
+                 int fbmax, int backward_len, int atk31F7, int atk31F9,
+                 int atk31FB, char *basepart) {
   std::vector<Node> pool;
-
-  // 最初を入れる
-  Node start_node;
-  start_node.depth = 0;
-  start_node.pw = std::string("");
-  start_node.digits.f4 = 0;
-  start_node.digits.f5 = 0;
-  start_node.digits.f6 = atk_count;
-  start_node.digits.f7 = 0;
-  start_node.digits.f8 = 0;
-  start_node.digits.f9 = 0;
-  start_node.digits.fa = 0;
-  start_node.digits.fb = 0;
-
-  // プレフィックス対応
-  for (int i = 0; i < prefix_count; i++) {
-    unsigned char p = prefix[i];
-    start_node = forward_step(start_node, p);
-  }
-
-  char basepart[256];
-  snprintf(basepart, 256, "dat_%02X%02X%02X%02X%02X%02X%02X%02X", atk31F4,
-           atk31F5, atk_count, atk31F7, atk31F8, atk31F9, atk31FA, atk31FB);
-
-  char minmax_filename[256];
-  snprintf(minmax_filename, 256, "%s/minmax.dat", basepart);
-  FILE *minmax_fp = fopen(minmax_filename, "rb");
-  unsigned char minmax_buffer[2];
-  fread(minmax_buffer, 2, 1, minmax_fp);
-  fclose(minmax_fp);
-  int fbmin = minmax_buffer[0];
-  int fbmax = minmax_buffer[1];
-
-  pool.push_back(start_node);
+  pool.push_back(ti.start_node);
 
   // 探索
   unsigned long long count = 0;
@@ -399,6 +338,7 @@ int main(int argc, char *argv[]) {
             ((node.digits.f9 ^ it->partial_f9) == atk31F9) &&
             (node.digits.fb + it->partial_fb == atk31FB)) {
           // 見つかった
+          std::lock_guard<std::mutex> lock(mtx);
           printf("Hit: %s in filename:[%s] count:%lu\n",
                  (node.pw + it->pw).c_str(), filename, vec.size());
           found_count++;
@@ -411,6 +351,139 @@ int main(int argc, char *argv[]) {
     std::vector<Node> new_nodes = forward_step_simd(node);
     pool.insert(pool.end(), new_nodes.begin(), new_nodes.end());
   }
-  printf("End, count: %llu found_count: %llu\n", count, found_count);
+  ti.is_finished = true;
+}
+
+int main(int argc, char *argv[]) {
+  int atk_count = 1;
+  int atk31F4 = 0, atk31F5 = 0, atk31F7 = 0, atk31F8 = 0, atk31F9 = 0,
+      atk31FA = 0, atk31FB = 0;
+
+  // アタック目標値を設定
+  if (argc < 9) {
+    printf("yokai_bw - Backward search table creator\n");
+    printf("usage:yokai_bw $31F4 $31F5 $31F6 $31F7 $31F8 $31F9 $31FA $31FB\n");
+    return 0;
+  }
+
+  // 引数を各ターゲットに割り当て
+  atk31F4 = (int)strtoul(argv[1], NULL, 16);
+  atk31F5 = (int)strtoul(argv[2], NULL, 16);
+  atk_count = (int)strtol(argv[3], NULL, 16);
+  atk31F7 = (int)strtoul(argv[4], NULL, 16);
+  atk31F8 = (int)strtoul(argv[5], NULL, 16);
+  atk31F9 = (int)strtoul(argv[6], NULL, 16);
+  atk31FA = (int)strtoul(argv[7], NULL, 16);
+  atk31FB = (int)strtoul(argv[8], NULL, 16);
+
+  int prefix_count = 0;
+  char prefix[PWLEN_MAX];
+  if (argc > 9) {
+    prefix_count = argc - 9;
+    printf("プレフィクス指定で動作します prefix: ");
+    for (int i = 0; i < prefix_count; i++) {
+      prefix[i] = (unsigned char)strtoul(argv[9 + i], NULL, 16);
+      printf("%02X ", prefix[i]);
+    }
+    printf("\n");
+  } else {
+    printf("最初からスタートします\n");
+  }
+
+  int backward_len = atk_count / 2;
+  printf("Backward_len: %d\n", backward_len);
+
+  // 最初を入れる
+  Node start_node;
+  start_node.depth = 0;
+  start_node.pw = std::string("");
+  start_node.digits.f4 = 0;
+  start_node.digits.f5 = 0;
+  start_node.digits.f6 = atk_count;
+  start_node.digits.f7 = 0;
+  start_node.digits.f8 = 0;
+  start_node.digits.f9 = 0;
+  start_node.digits.fa = 0;
+  start_node.digits.fb = 0;
+
+  // プレフィックス対応
+  for (int i = 0; i < prefix_count; i++) {
+    unsigned char p = prefix[i];
+    start_node = forward_step(start_node, p);
+  }
+
+  char basepart[256];
+  snprintf(basepart, 256, "dat_%02X%02X%02X%02X%02X%02X%02X%02X", atk31F4,
+           atk31F5, atk_count, atk31F7, atk31F8, atk31F9, atk31FA, atk31FB);
+
+  char minmax_filename[256];
+  snprintf(minmax_filename, 256, "%s/minmax.dat", basepart);
+  FILE *minmax_fp = fopen(minmax_filename, "rb");
+  unsigned char minmax_buffer[2];
+  fread(minmax_buffer, 2, 1, minmax_fp);
+  fclose(minmax_fp);
+  int fbmin = minmax_buffer[0];
+  int fbmax = minmax_buffer[1];
+
+  std::vector<ThreadInfo> thread_info_vector;
+  for (int i = 0; i < NUM_CHARSET; i++) {
+    unsigned char p1 = itoa[i];
+    Node node1 = forward_step(start_node, p1);
+    for (int j = 0; j < NUM_CHARSET; j++) {
+      unsigned char p2 = itoa[j];
+      Node node2 = forward_step(node1, p2);
+      ThreadInfo ti;
+      ti.is_finished = false;
+      ti.start_node = node2;
+      ti.thread_id = i * NUM_CHARSET + j;
+      thread_info_vector.push_back(std::move(ti));
+    }
+  }
+
+  int create_count = 0;
+  int cpu_count = std::thread::hardware_concurrency();
+  std::vector<std::thread> threads;
+  std::vector<int> current_targets;
+  std::mutex mtx;
+
+  // 最初はCPUコア数分作る
+  for (int i = 0; i < cpu_count; i++) {
+    threads.push_back(std::thread([&, create_count]() {
+      calc_thread(thread_info_vector[create_count], mtx, atk_count, fbmin,
+                  fbmax, backward_len, atk31F7, atk31F9, atk31FB, basepart);
+    }));
+    current_targets.push_back(create_count);
+    create_count++;
+  }
+
+  // 5us間隔でポーリングして終わり次第、次を始めさせる
+  while (create_count < NUM_CHARSET * NUM_CHARSET) {
+    for (int i = 0; i < cpu_count; i++) {
+      if (thread_info_vector[current_targets[i]].is_finished) {
+        threads[i].join();
+        threads[i] = std::thread([&, create_count]() {
+          calc_thread(thread_info_vector[create_count], mtx, atk_count, fbmin,
+                      fbmax, backward_len, atk31F7, atk31F9, atk31FB, basepart);
+        });
+        current_targets[i] = create_count;
+        create_count++;
+        if (create_count >= NUM_CHARSET * NUM_CHARSET) {
+          break;
+        }
+      }
+    }
+    std::this_thread::sleep_for(std::chrono::microseconds(5));
+  }
+  {
+    std::lock_guard<std::mutex> lock(mtx);
+    printf("あとは全部待つ\n");
+  }
+
+  // 最後は全部終わるまで待つ
+  for (int i = 0; i < cpu_count; i++) {
+    threads[i].join();
+  }
+
+  printf("End\n");
   return 0;
 }
