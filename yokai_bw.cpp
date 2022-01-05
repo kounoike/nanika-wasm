@@ -372,8 +372,6 @@ int main(int argc, char *argv[]) {
   create_lut();
   printf("LUTの計算完了\n");
 
-  std::vector<Node> pool;
-
   // 最初を入れる
   Node start_node;
   start_node.depth = 0;
@@ -399,6 +397,8 @@ int main(int argc, char *argv[]) {
     return 0;
   }
   std::filesystem::create_directories(basename);
+
+  std::vector<Node> pool;
 
   pool.push_back(std::move(start_node));
 
